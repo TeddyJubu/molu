@@ -12,7 +12,8 @@ describe("/api/products", () => {
     const res = await GET(new Request("http://example.test/api/products"));
     expect(res.status).toBe(503);
     const body = await res.json();
-    expect(body.error).toMatch(/NocoDB is not configured/);
+    expect(body.ok).toBe(false);
+    expect(body.error.message).toMatch(/NocoDB is not configured/);
   });
 
   it("returns products when configured", async () => {
@@ -31,18 +32,20 @@ describe("/api/products", () => {
     const res = await GET(new Request("http://example.test/api/products?page=1&pageSize=10"));
     expect(res.status).toBe(200);
     const body = await res.json();
-    expect(body.items).toHaveLength(1);
+    expect(body.ok).toBe(true);
+    expect(body.data.items).toHaveLength(1);
     vi.unmock("@/lib/nocodb");
   });
 
   it("returns 502 on upstream errors", async () => {
     vi.resetModules();
+    const { UpstreamError } = await import("@/lib/api/errors");
 
     vi.doMock("@/lib/nocodb", () => ({
       isNocoConfigured: () => true,
       NocoDBClient: class {
         async listProducts() {
-          throw new Error("upstream");
+          throw new UpstreamError({ service: "nocodb", status: 500 });
         }
       }
     }));

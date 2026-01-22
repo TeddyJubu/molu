@@ -1,6 +1,8 @@
-import { NextResponse } from "next/server";
 import { z } from "zod";
 import { isNocoConfigured, NocoDBClient } from "@/lib/nocodb";
+import { ConfigError, InvalidJsonError } from "@/lib/api/errors";
+import { fail, failFromError, ok } from "@/lib/api/response";
+import { notifyPaymentCompleted, notifyPaymentFailed } from "@/lib/notifications";
 
 const eventSchema = z.object({
   orderId: z.string().min(1),
@@ -9,57 +11,73 @@ const eventSchema = z.object({
 });
 
 function isAuthorized(request: Request) {
+  if (process.env.ALLOW_MOCK_WEBHOOKS === "true" && request.headers.get("x-mock-payment") === "true") return true;
   const secret = process.env.PAYMENTS_WEBHOOK_SECRET;
   if (secret) return request.headers.get("x-webhook-secret") === secret;
+  if (process.env.ALLOW_MOCK_WEBHOOKS === "true") return true;
   return process.env.NODE_ENV !== "production";
 }
 
 export async function POST(request: Request) {
-  let body: unknown;
-  try {
-    body = await request.json();
-  } catch {
-    return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
-  }
-
-  const parsed = eventSchema.safeParse(body);
-  if (!parsed.success) {
-    return NextResponse.json({ error: "Invalid webhook payload" }, { status: 400 });
-  }
-
   if (!isAuthorized(request)) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
-  }
-
-  if (!isNocoConfigured()) {
-    return NextResponse.json(
-      { error: "NocoDB is not configured. Set NOCODB_API_URL, NOCODB_API_TOKEN, NOCODB_PROJECT_ID." },
-      { status: 503 }
-    );
+    return fail(403, "UNAUTHORIZED", "Unauthorized");
   }
 
   try {
+    if (!isNocoConfigured()) {
+      throw new ConfigError("NocoDB is not configured. Set NOCODB_API_URL, NOCODB_API_TOKEN, NOCODB_PROJECT_ID.");
+    }
+
+    let body: unknown;
+    try {
+      body = await request.json();
+    } catch {
+      throw new InvalidJsonError();
+    }
+
+    const parsed = eventSchema.safeParse(body);
+    if (!parsed.success) {
+      throw parsed.error;
+    }
+
     const nocodb = new NocoDBClient();
     const order = await nocodb.getOrder(parsed.data.orderId);
+    const origin = new URL(request.url).origin;
 
     if (order.payment_status === "completed") {
-      return NextResponse.json({ ok: true });
+      return ok({ status: "already_completed" });
     }
 
     if (order.payment_id && order.payment_id !== parsed.data.paymentId) {
-      return NextResponse.json({ error: "Payment ID mismatch" }, { status: 409 });
+      return fail(409, "PAYMENT_ID_MISMATCH", "Payment ID mismatch");
     }
 
     if (parsed.data.status === "completed") {
       await nocodb.updateOrder(order.id, { payment_status: "completed", order_status: "confirmed" });
+      await notifyPaymentCompleted({
+        origin,
+        orderId: order.id,
+        email: order.customer_email,
+        phone: order.customer_phone,
+        totalAmount: order.total_amount,
+        paymentMethod: order.payment_method,
+        paymentId: parsed.data.paymentId
+      });
     } else {
       await nocodb.updateOrder(order.id, { payment_status: "failed" });
+      await notifyPaymentFailed({
+        origin,
+        orderId: order.id,
+        email: order.customer_email,
+        phone: order.customer_phone,
+        totalAmount: order.total_amount,
+        paymentMethod: order.payment_method,
+        paymentId: parsed.data.paymentId
+      });
     }
 
-    return NextResponse.json({ ok: true });
+    return ok({ status: "ok" });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Unknown error";
-    return NextResponse.json({ error: message }, { status: 502 });
+    return failFromError(error);
   }
 }
-

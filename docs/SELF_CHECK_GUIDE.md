@@ -77,3 +77,25 @@ npm run dev
 - If credentials are wrong, `/admin` should return 401 with a Basic Auth prompt.
 - If credentials match, `/admin` should render the Admin page.
 
+## 9) Verify Lighthouse (Mobile ≥90)
+
+1. Build and start the production server:
+
+```bash
+npm run build
+npm run start
+```
+
+2. In Chrome DevTools → Lighthouse:
+- Mode: Navigation
+- Device: Mobile
+- Categories: Performance (and optionally Accessibility/Best Practices)
+
+3. Run Lighthouse on key routes:
+- `/`
+- `/products`
+- `/products/[id]`
+- `/cart`
+- `/checkout`
+
+Expected: Performance score ≥ 90 on Mobile for the key routes.

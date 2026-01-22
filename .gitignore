@@ -9,3 +9,5 @@ nocodb-data
 *.db
 .next
 node_modules
+playwright-report
+test-results

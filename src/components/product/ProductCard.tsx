@@ -8,7 +8,6 @@ import { Card, CardContent, CardFooter } from "@/components/ui/card";
 import { Star } from "lucide-react";
 import type { Product } from "@/lib/demo-data";
 import { useCart } from "@/store/cart";
-import { toast } from "sonner"; // Assuming toast is available, or use window.alert/console for now
 
 export interface ProductCardProps {
   product: Product;
@@ -20,19 +19,16 @@ export function ProductCard({ product }: ProductCardProps) {
   const handleAddToCart = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    
+
     addItem({
       productId: product.id,
       name: product.name,
       price: product.price,
-      size: product.sizes[0], // Default size
-      color: product.colors[0], // Default color
+      size: product.sizes[0],
+      color: product.colors[0],
       quantity: 1,
       image: product.image,
     });
-    
-    // Simple feedback since we haven't installed sonner yet
-    // console.log("Added to cart");
   };
 
   return (
@@ -43,6 +39,7 @@ export function ProductCard({ product }: ProductCardProps) {
             src={product.image}
             alt={product.name}
             fill
+            sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
             className="object-cover transition-transform duration-500 group-hover:scale-105"
           />
           {product.isNew && (

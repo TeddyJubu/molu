@@ -2,6 +2,8 @@
 
 import { useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import type { ApiResponse } from "@/lib/api/types";
+import { apiErrorMessage } from "@/lib/api/types";
 
 export function MockPaymentClient() {
   const router = useRouter();
@@ -29,13 +31,13 @@ export function MockPaymentClient() {
     try {
       const res = await fetch(`/api/webhooks/${gateway}`, {
         method: "POST",
-        headers: { "content-type": "application/json" },
+        headers: { "content-type": "application/json", "x-mock-payment": "true" },
         body: JSON.stringify({ orderId, paymentId, status })
       });
 
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
-        throw new Error(body.error || "Webhook failed");
+      const body = (await res.json().catch(() => null)) as ApiResponse<{ status: string }> | null;
+      if (!res.ok || !body || !body.ok) {
+        throw new Error(apiErrorMessage(body));
       }
 
       router.push(`/order/${orderId}`);

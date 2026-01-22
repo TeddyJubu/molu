@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { InventoryItem, Order, OrderItem, Product, ProductImage, ProductSummary } from "@/types";
+import { ConfigError, NotFoundError, UpstreamError } from "@/lib/api/errors";
 
 const listResponseSchema = z.object({
   list: z.array(z.unknown())
@@ -73,21 +74,33 @@ const orderSchema = z.object({
   updated_at: z.string().optional()
 });
 
-const orderItemSchema = z.object({
+const orderItemSchema = z
+  .object({
+    id: z.union([z.string(), z.number()]).transform(String).optional(),
+    row_id: z.union([z.string(), z.number()]).transform(String).optional(),
+    order_id: z.union([z.string(), z.number()]).transform(String),
+    product_id: z.union([z.string(), z.number()]).transform(String),
+    product_name: z.string(),
+    product_price: z.number(),
+    size: z.string(),
+    color: z.string(),
+    quantity: z.number(),
+    subtotal: z.number()
+  })
+  .refine((v) => Boolean(v.id ?? v.row_id), { path: ["id"], message: "Missing id" })
+  .transform(({ id, row_id, ...rest }) => ({ id: id ?? (row_id as string), ...rest }));
+
+const productAdminSchema = z.object({
+  row_id: z.union([z.string(), z.number()]).transform(String),
   id: z.union([z.string(), z.number()]).transform(String),
-  order_id: z.union([z.string(), z.number()]).transform(String),
-  product_id: z.union([z.string(), z.number()]).transform(String),
-  product_name: z.string(),
-  product_price: z.number(),
-  size: z.string(),
-  color: z.string(),
-  quantity: z.number(),
-  subtotal: z.number()
+  name: z.string(),
+  price: z.number(),
+  is_active: z.preprocess(asBoolean, z.boolean()).optional()
 });
 
 function requiredEnv(name: string) {
   const value = process.env[name];
-  if (!value) throw new Error(`${name} is required`);
+  if (!value) throw new ConfigError(`${name} is required`);
   return value;
 }
 
@@ -116,22 +129,33 @@ export class NocoDBClient {
   }
 
   private async requestJson<T>(pathname: string, init?: RequestInit, query?: Record<string, any>) {
-    const res = await fetch(this.url(pathname, query), {
-      ...init,
-      headers: {
-        "xc-auth": this.token,
-        "xc-token": this.token,
-        "content-type": "application/json",
-        ...(init?.headers ?? {})
+    try {
+      const res = await fetch(this.url(pathname, query), {
+        ...init,
+        headers: {
+          "xc-auth": this.token,
+          "xc-token": this.token,
+          "content-type": "application/json",
+          ...(init?.headers ?? {})
+        }
+      });
+
+      if (!res.ok) {
+        if (res.status === 404) throw new NotFoundError("Not found");
+        throw new UpstreamError({ service: "nocodb", status: res.status });
       }
-    });
 
-    if (!res.ok) {
-      const text = await res.text().catch(() => "");
-      throw new Error(`NocoDB request failed (${res.status}): ${text || res.statusText}`);
+      return (await res.json()) as T;
+    } catch (error) {
+      if (error instanceof NotFoundError || error instanceof UpstreamError) throw error;
+      console.error("NocoDB fetch failed:", error);
+      throw new UpstreamError({
+        service: "nocodb",
+        status: 503,
+        message: "NocoDB is not reachable. Ensure the server is running.",
+        details: error
+      });
     }
-
-    return (await res.json()) as T;
   }
 
   async listProducts(params: { page?: number; pageSize?: number; is_active?: boolean } = {}) {
@@ -158,10 +182,41 @@ export class NocoDBClient {
     return items;
   }
 
+  async listProductsAdmin(params: { page?: number; pageSize?: number } = {}) {
+    const limit = params.pageSize ?? 50;
+    const page = params.page ?? 1;
+    const offset = Math.max(0, (page - 1) * limit);
+
+    const raw = await this.requestJson<unknown>(`/api/v1/db/data/v1/${this.projectId}/products`, undefined, {
+      limit,
+      offset,
+      fields: "row_id,id,name,price,is_active"
+    });
+
+    const parsed = listResponseSchema.parse(raw);
+    return z.array(productAdminSchema).parse(parsed.list);
+  }
+
   async getProductById(id: string) {
     const raw = await this.requestJson<unknown>(
       `/api/v1/db/data/v1/${this.projectId}/products/${encodeURIComponent(id)}`
     );
+    return productSchema.parse(raw) as Product;
+  }
+
+  async updateProduct(id: string, patch: Partial<Product>) {
+    const row = await this.requestJson<unknown>(`/api/v1/db/data/v1/${this.projectId}/products/find-one`, undefined, {
+      where: `(id,eq,${id})`,
+      fields: "row_id"
+    });
+    const rowId =
+      typeof (row as any)?.row_id === "number" || typeof (row as any)?.row_id === "string" ? String((row as any).row_id) : null;
+    if (!rowId) throw new NotFoundError("Product not found");
+
+    const raw = await this.requestJson<unknown>(`/api/v1/db/data/v1/${this.projectId}/products/${encodeURIComponent(rowId)}`, {
+      method: "PATCH",
+      body: JSON.stringify(patch)
+    });
     return productSchema.parse(raw) as Product;
   }
 
@@ -212,13 +267,33 @@ export class NocoDBClient {
     });
     const rowId =
       typeof (row as any)?.row_id === "number" || typeof (row as any)?.row_id === "string" ? String((row as any).row_id) : null;
-    if (!rowId) throw new Error("Order not found");
+    if (!rowId) throw new NotFoundError("Order not found");
 
     const raw = await this.requestJson<unknown>(`/api/v1/db/data/v1/${this.projectId}/orders/${encodeURIComponent(rowId)}`, {
-      method: "PUT",
+      method: "PATCH",
       body: JSON.stringify(patch)
     });
     return orderSchema.parse(raw) as Order;
+  }
+
+  async listOrders(params: { page?: number; pageSize?: number; order_status?: string; payment_status?: string } = {}) {
+    const limit = params.pageSize ?? 50;
+    const page = params.page ?? 1;
+    const offset = Math.max(0, (page - 1) * limit);
+
+    const filters: string[] = [];
+    if (params.order_status) filters.push(`(order_status,eq,${params.order_status})`);
+    if (params.payment_status) filters.push(`(payment_status,eq,${params.payment_status})`);
+    const where = filters.length ? filters.join("~and") : undefined;
+
+    const raw = await this.requestJson<unknown>(`/api/v1/db/data/v1/${this.projectId}/orders`, undefined, {
+      limit,
+      offset,
+      ...(where ? { where } : {})
+    });
+
+    const parsed = listResponseSchema.parse(raw);
+    return z.array(orderSchema).parse(parsed.list) as Order[];
   }
 
   async listOrderItems(orderId: string) {

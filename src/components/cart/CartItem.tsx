@@ -18,7 +18,7 @@ export function CartItem({ item, onRemove, onQuantityChange }: CartItemProps) {
     <div className="flex gap-4 py-4">
       <div className="relative h-20 w-20 shrink-0 overflow-hidden rounded-md border bg-secondary/10">
         {item.image ? (
-          <Image src={item.image} alt={item.name} fill className="object-cover" />
+          <Image src={item.image} alt={item.name} fill sizes="80px" className="object-cover" />
         ) : (
           <div className="flex h-full w-full items-center justify-center bg-secondary/10">
             <span className="text-xs text-muted-foreground">No img</span>

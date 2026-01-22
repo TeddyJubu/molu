@@ -1,6 +1,8 @@
-import { NextResponse } from "next/server";
 import { isNocoConfigured, NocoDBClient } from "@/lib/nocodb";
 import { orderSchema } from "@/lib/validation";
+import { ConfigError, InvalidJsonError } from "@/lib/api/errors";
+import { failFromError, ok } from "@/lib/api/response";
+import { notifyOrderCreated } from "@/lib/notifications";
 
 function orderId() {
   const rand = Math.random().toString(16).slice(2, 10);
@@ -8,26 +10,23 @@ function orderId() {
 }
 
 export async function POST(request: Request) {
-  let body: unknown;
   try {
-    body = await request.json();
-  } catch {
-    return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
-  }
+    let body: unknown;
+    try {
+      body = await request.json();
+    } catch {
+      throw new InvalidJsonError();
+    }
 
-  const parsed = orderSchema.safeParse(body);
-  if (!parsed.success) {
-    return NextResponse.json({ error: "Invalid order payload" }, { status: 400 });
-  }
+    const parsed = orderSchema.safeParse(body);
+    if (!parsed.success) {
+      throw parsed.error;
+    }
 
-  if (!isNocoConfigured()) {
-    return NextResponse.json(
-      { error: "NocoDB is not configured. Set NOCODB_API_URL, NOCODB_API_TOKEN, NOCODB_PROJECT_ID." },
-      { status: 503 }
-    );
-  }
+    if (!isNocoConfigured()) {
+      throw new ConfigError("NocoDB is not configured. Set NOCODB_API_URL, NOCODB_API_TOKEN, NOCODB_PROJECT_ID.");
+    }
 
-  try {
     const nocodb = new NocoDBClient();
     const products = await Promise.all(parsed.data.items.map((i) => nocodb.getProductById(i.productId)));
     const priceById = new Map(products.map((p) => [p.id, p.price] as const));
@@ -39,6 +38,7 @@ export async function POST(request: Request) {
     }, 0);
 
     const id = orderId();
+    const origin = new URL(request.url).origin;
 
     await nocodb.createOrder({
       id,
@@ -69,10 +69,18 @@ export async function POST(request: Request) {
       });
     }
 
-    return NextResponse.json({ id });
+    await notifyOrderCreated({
+      origin,
+      orderId: id,
+      email: parsed.data.customer_email,
+      phone: parsed.data.customer_phone,
+      customerName: parsed.data.customer_name,
+      totalAmount: total_amount,
+      paymentMethod: parsed.data.payment_method
+    });
+
+    return ok({ id });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Unknown error";
-    return NextResponse.json({ error: message }, { status: 502 });
+    return failFromError(error);
   }
 }
-

@@ -6,6 +6,8 @@ import { useCart } from "@/store/cart";
 import { DeliveryForm, type DeliveryFormData } from "@/components/checkout/DeliveryForm";
 import { PaymentSelector } from "@/components/checkout/PaymentSelector";
 import { OrderSummary } from "@/components/checkout/OrderSummary";
+import type { ApiResponse } from "@/lib/api/types";
+import { apiErrorMessage } from "@/lib/api/types";
 
 export default function CheckoutPage() {
   const router = useRouter();
@@ -76,24 +78,23 @@ export default function CheckoutPage() {
                     })
                   });
 
-                  if (!res.ok) {
-                    const body = await res.json().catch(() => ({}));
-                    throw new Error(body.error || "Failed to create order");
+                  const orderBody = (await res.json().catch(() => null)) as ApiResponse<{ id: string }> | null;
+                  if (!res.ok || !orderBody || !orderBody.ok) {
+                    throw new Error(apiErrorMessage(orderBody));
                   }
-
-                  const { id } = (await res.json()) as { id: string };
+                  const { id } = orderBody.data;
                   const payRes = await fetch(`/api/payments/${paymentMethod}`, {
                     method: "POST",
                     headers: { "content-type": "application/json" },
                     body: JSON.stringify({ orderId: id, amount: total })
                   });
 
-                  if (!payRes.ok) {
-                    const body = await payRes.json().catch(() => ({}));
-                    throw new Error(body.error || "Failed to initiate payment");
+                  const payBody = (await payRes.json().catch(() => null)) as ApiResponse<{ paymentUrl: string }> | null;
+                  if (!payRes.ok || !payBody || !payBody.ok) {
+                    throw new Error(apiErrorMessage(payBody));
                   }
 
-                  const { paymentUrl } = (await payRes.json()) as { paymentUrl: string };
+                  const { paymentUrl } = payBody.data;
                   clear();
                   window.location.href = paymentUrl;
                 } catch (e) {

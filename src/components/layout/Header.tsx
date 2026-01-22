@@ -1,8 +1,9 @@
 "use client";
 
 import Link from "next/link";
+import { useState } from "react";
 import { useCart } from "@/store/cart";
-import { ShoppingBag, Menu, Search } from "lucide-react";
+import { ShoppingBag, Menu } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
@@ -11,6 +12,7 @@ import { Input } from "@/components/ui/input";
 
 export function Header() {
   const itemCount = useCart((s) => s.items.reduce((sum, i) => sum + i.quantity, 0));
+  const [cartOpen, setCartOpen] = useState(false);
 
   return (
     <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
@@ -55,7 +57,7 @@ export function Header() {
               <Input type="search" placeholder="Search..." className="h-9 w-[200px] lg:w-[300px]" />
             </div>
 
-          <Sheet>
+          <Sheet open={cartOpen} onOpenChange={setCartOpen}>
             <SheetTrigger asChild>
               <Button variant="ghost" size="icon" className="relative">
                 <ShoppingBag className="h-5 w-5" />
@@ -71,7 +73,7 @@ export function Header() {
               <SheetHeader>
                 <SheetTitle>Shopping Cart</SheetTitle>
               </SheetHeader>
-              <CartSheetContent />
+              <CartSheetContent onNavigate={() => setCartOpen(false)} />
             </SheetContent>
           </Sheet>
         </div>

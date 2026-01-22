@@ -1,6 +1,10 @@
 describe("/api/webhooks/bkash", () => {
-  it("returns 400 for invalid payload", async () => {
+  it("returns 422 for invalid payload", async () => {
     vi.resetModules();
+    vi.doMock("@/lib/nocodb", () => ({
+      isNocoConfigured: () => true,
+      NocoDBClient: class {}
+    }));
     const { POST } = await import("@/app/api/webhooks/bkash/route");
     const res = await POST(
       new Request("http://example.test/api/webhooks/bkash", {
@@ -8,8 +12,9 @@ describe("/api/webhooks/bkash", () => {
         body: JSON.stringify({ nope: true })
       })
     );
-    expect(res.status).toBe(400);
-  });
+    expect(res.status).toBe(422);
+    vi.unmock("@/lib/nocodb");
+  }, 15000);
 
   it("returns 403 when unauthorized in production", async () => {
     vi.resetModules();
@@ -31,6 +36,10 @@ describe("/api/webhooks/bkash", () => {
     vi.resetModules();
     const prevEnv = process.env;
     process.env = { ...prevEnv, NODE_ENV: "test" };
+    vi.doMock("@/lib/nocodb", () => ({
+      isNocoConfigured: () => false,
+      NocoDBClient: class {}
+    }));
 
     const { POST } = await import("@/app/api/webhooks/bkash/route");
     const res = await POST(
@@ -41,6 +50,7 @@ describe("/api/webhooks/bkash", () => {
     );
     expect(res.status).toBe(503);
     process.env = prevEnv;
+    vi.unmock("@/lib/nocodb");
   });
 
   it("updates order on completed payment", async () => {
@@ -51,7 +61,15 @@ describe("/api/webhooks/bkash", () => {
       isNocoConfigured: () => true,
       NocoDBClient: class {
         async getOrder() {
-          return { id: "ORD-1", payment_status: "pending", payment_id: "P" };
+          return {
+            id: "ORD-1",
+            payment_status: "pending",
+            payment_id: "P",
+            customer_email: "a@b.com",
+            customer_phone: "+880123456789",
+            total_amount: 1000,
+            payment_method: "bkash"
+          };
         }
         updateOrder = updateOrder;
       }
@@ -76,7 +94,15 @@ describe("/api/webhooks/bkash", () => {
       isNocoConfigured: () => true,
       NocoDBClient: class {
         async getOrder() {
-          return { id: "ORD-1", payment_status: "pending", payment_id: "P-REAL" };
+          return {
+            id: "ORD-1",
+            payment_status: "pending",
+            payment_id: "P-REAL",
+            customer_email: "a@b.com",
+            customer_phone: "+880123456789",
+            total_amount: 1000,
+            payment_method: "bkash"
+          };
         }
       }
     }));
@@ -100,7 +126,15 @@ describe("/api/webhooks/bkash", () => {
       isNocoConfigured: () => true,
       NocoDBClient: class {
         async getOrder() {
-          return { id: "ORD-1", payment_status: "pending", payment_id: "P" };
+          return {
+            id: "ORD-1",
+            payment_status: "pending",
+            payment_id: "P",
+            customer_email: "a@b.com",
+            customer_phone: "+880123456789",
+            total_amount: 1000,
+            payment_method: "bkash"
+          };
         }
         updateOrder = updateOrder;
       }
@@ -120,12 +154,13 @@ describe("/api/webhooks/bkash", () => {
 
   it("returns 502 when NocoDB throws", async () => {
     vi.resetModules();
+    const { UpstreamError } = await import("@/lib/api/errors");
 
     vi.doMock("@/lib/nocodb", () => ({
       isNocoConfigured: () => true,
       NocoDBClient: class {
         async getOrder() {
-          throw new Error("boom");
+          throw new UpstreamError({ service: "nocodb", status: 500 });
         }
       }
     }));

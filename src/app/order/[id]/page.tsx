@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { isNocoConfigured, NocoDBClient } from "@/lib/nocodb";
+import { NotFoundError } from "@/lib/api/errors";
 
 export default async function OrderPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -58,8 +59,18 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
         </Link>
       </main>
     );
-  } catch {
-    notFound();
+  } catch (error) {
+    if (error instanceof NotFoundError) {
+      notFound();
+    }
+    return (
+      <main className="mx-auto max-w-2xl p-6">
+        <h1 className="text-2xl font-bold">Order {id}</h1>
+        <p className="mt-3 text-gray-700">We could not load this order right now. Please try again.</p>
+        <Link href="/products" className="mt-4 inline-block underline">
+          Browse products
+        </Link>
+      </main>
+    );
   }
 }
-

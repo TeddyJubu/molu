@@ -1,7 +1,9 @@
-import { NextResponse } from "next/server";
 import { z } from "zod";
 import { isNocoConfigured, NocoDBClient } from "@/lib/nocodb";
 import { initiateBkashPayment } from "@/lib/payments/bkash";
+import { ConfigError, InvalidJsonError } from "@/lib/api/errors";
+import { failFromError, ok } from "@/lib/api/response";
+import { notifyPaymentInitiated } from "@/lib/notifications";
 
 const requestSchema = z.object({
   orderId: z.string().min(1),
@@ -9,26 +11,23 @@ const requestSchema = z.object({
 });
 
 export async function POST(request: Request) {
-  let body: unknown;
   try {
-    body = await request.json();
-  } catch {
-    return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
-  }
+    let body: unknown;
+    try {
+      body = await request.json();
+    } catch {
+      throw new InvalidJsonError();
+    }
 
-  const parsed = requestSchema.safeParse(body);
-  if (!parsed.success) {
-    return NextResponse.json({ error: "Invalid payment payload" }, { status: 400 });
-  }
+    const parsed = requestSchema.safeParse(body);
+    if (!parsed.success) {
+      throw parsed.error;
+    }
 
-  if (!isNocoConfigured()) {
-    return NextResponse.json(
-      { error: "NocoDB is not configured. Set NOCODB_API_URL, NOCODB_API_TOKEN, NOCODB_PROJECT_ID." },
-      { status: 503 }
-    );
-  }
+    if (!isNocoConfigured()) {
+      throw new ConfigError("NocoDB is not configured. Set NOCODB_API_URL, NOCODB_API_TOKEN, NOCODB_PROJECT_ID.");
+    }
 
-  try {
     const origin = new URL(request.url).origin;
     const nocodb = new NocoDBClient();
     const order = await nocodb.getOrder(parsed.data.orderId);
@@ -43,10 +42,19 @@ export async function POST(request: Request) {
       payment_status: "pending"
     });
 
-    return NextResponse.json({ paymentUrl: session.paymentUrl, paymentId: session.paymentId });
+    await notifyPaymentInitiated({
+      origin,
+      orderId: order.id,
+      email: order.customer_email,
+      phone: order.customer_phone,
+      totalAmount: order.total_amount,
+      paymentMethod: order.payment_method,
+      paymentId: session.paymentId,
+      paymentUrl: session.paymentUrl
+    });
+
+    return ok({ paymentUrl: session.paymentUrl, paymentId: session.paymentId });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Unknown error";
-    return NextResponse.json({ error: message }, { status: 502 });
+    return failFromError(error);
   }
 }
-

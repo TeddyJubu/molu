@@ -1,15 +1,14 @@
 "use client";
 
-import Link from "next/link";
 import { useCart } from "@/store/cart";
 import { CartItem } from "@/components/cart/CartItem";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { SheetClose } from "@/components/ui/sheet";
 import { ShoppingBag } from "lucide-react";
+import { useRouter } from "next/navigation";
 
-export function CartSheetContent() {
+export function CartSheetContent({ onNavigate }: { onNavigate?: () => void }) {
+  const router = useRouter();
   const items = useCart((s) => s.items);
   const removeItem = useCart((s) => s.removeItem);
   const updateQuantity = useCart((s) => s.updateQuantity);
@@ -25,11 +24,16 @@ export function CartSheetContent() {
           <p className="text-lg font-medium">Your cart is empty</p>
           <p className="text-sm text-muted-foreground">Add some items to start shopping.</p>
         </div>
-        <SheetClose asChild>
-          <Button asChild variant="outline" className="mt-4">
-            <Link href="/products">Browse Products</Link>
-          </Button>
-        </SheetClose>
+        <Button
+          variant="outline"
+          className="mt-4"
+          onClick={() => {
+            router.push("/products");
+            onNavigate?.();
+          }}
+        >
+          Browse Products
+        </Button>
       </div>
     );
   }
@@ -65,11 +69,26 @@ export function CartSheetContent() {
             <span>৳{total}</span>
           </div>
         </div>
-        <SheetClose asChild>
-          <Button asChild className="w-full" size="lg">
-            <Link href="/checkout">Checkout</Link>
-          </Button>
-        </SheetClose>
+        <Button
+          className="w-full"
+          size="lg"
+          onClick={() => {
+            router.push("/checkout");
+            onNavigate?.();
+          }}
+        >
+          Checkout
+        </Button>
+        <Button
+          className="w-full"
+          variant="outline"
+          onClick={() => {
+            router.push("/cart");
+            onNavigate?.();
+          }}
+        >
+          View Cart
+        </Button>
       </div>
     </div>
   );

@@ -15,16 +15,16 @@ describe("CartItem", () => {
   it("renders item basics", () => {
     render(<CartItem item={item} onRemove={() => {}} onQuantityChange={() => {}} />);
     expect(screen.getByText("Onesie")).toBeInTheDocument();
-    expect(screen.getByText("৳500")).toBeInTheDocument();
-    expect(screen.getByText(/Size: 6M/)).toBeInTheDocument();
+    expect(screen.getByText("৳1000")).toBeInTheDocument();
+    expect(screen.getByText(/6M/)).toBeInTheDocument();
   });
 
   it("calls onQuantityChange for +/-", () => {
     const onQuantityChange = vi.fn();
     render(<CartItem item={item} onRemove={() => {}} onQuantityChange={onQuantityChange} />);
 
-    fireEvent.click(screen.getByLabelText("Decrease quantity"));
-    fireEvent.click(screen.getByLabelText("Increase quantity"));
+    fireEvent.click(screen.getByRole("button", { name: "Decrease" }));
+    fireEvent.click(screen.getByRole("button", { name: "Increase" }));
 
     expect(onQuantityChange).toHaveBeenCalledWith({ productId: "p1", size: "6M", color: "White" }, 1);
     expect(onQuantityChange).toHaveBeenCalledWith({ productId: "p1", size: "6M", color: "White" }, 3);

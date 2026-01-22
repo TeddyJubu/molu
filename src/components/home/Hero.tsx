@@ -19,13 +19,14 @@ export function Hero() {
         <CarouselContent>
           {heroSlides.map((slide) => (
             <CarouselItem key={slide.id}>
-              <div className="relative h-[50vh] min-h-[400px] w-full overflow-hidden md:h-[60vh]">
+              <div className="relative h-[45vh] min-h-[320px] w-full overflow-hidden md:h-[60vh]">
                 <Image
                   src={slide.image}
                   alt={slide.title}
                   fill
                   className="object-cover brightness-75"
                   priority={slide.id === 1}
+                  sizes="100vw"
                 />
                 <div className="absolute inset-0 flex flex-col items-center justify-center p-6 text-center text-white">
                   <h1 className="mb-4 max-w-2xl font-baloo text-4xl font-bold leading-tight md:text-6xl drop-shadow-lg">

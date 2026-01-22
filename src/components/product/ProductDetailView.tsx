@@ -37,6 +37,7 @@ export function ProductDetailView({ product }: { product: Product }) {
           alt={product.name}
           fill
           className="object-cover"
+          sizes="(max-width: 768px) 100vw, 50vw"
           priority
         />
         {product.isNew && (

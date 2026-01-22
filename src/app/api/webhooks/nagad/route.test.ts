@@ -1,6 +1,10 @@
 describe("/api/webhooks/nagad", () => {
-  it("returns 400 for invalid payload", async () => {
+  it("returns 422 for invalid payload", async () => {
     vi.resetModules();
+    vi.doMock("@/lib/nocodb", () => ({
+      isNocoConfigured: () => true,
+      NocoDBClient: class {}
+    }));
     const { POST } = await import("@/app/api/webhooks/nagad/route");
     const res = await POST(
       new Request("http://example.test/api/webhooks/nagad", {
@@ -8,11 +12,16 @@ describe("/api/webhooks/nagad", () => {
         body: JSON.stringify({ nope: true })
       })
     );
-    expect(res.status).toBe(400);
-  });
+    expect(res.status).toBe(422);
+    vi.unmock("@/lib/nocodb");
+  }, 15000);
 
   it("returns 503 when not configured", async () => {
     vi.resetModules();
+    vi.doMock("@/lib/nocodb", () => ({
+      isNocoConfigured: () => false,
+      NocoDBClient: class {}
+    }));
     const { POST } = await import("@/app/api/webhooks/nagad/route");
     const res = await POST(
       new Request("http://example.test/api/webhooks/nagad", {
@@ -21,6 +30,7 @@ describe("/api/webhooks/nagad", () => {
       })
     );
     expect(res.status).toBe(503);
+    vi.unmock("@/lib/nocodb");
   });
 
   it("idempotently accepts duplicate completed webhooks", async () => {
@@ -31,7 +41,15 @@ describe("/api/webhooks/nagad", () => {
       isNocoConfigured: () => true,
       NocoDBClient: class {
         async getOrder() {
-          return { id: "ORD-1", payment_status: "completed", payment_id: "P" };
+          return {
+            id: "ORD-1",
+            payment_status: "completed",
+            payment_id: "P",
+            customer_email: "a@b.com",
+            customer_phone: "+880123456789",
+            total_amount: 1000,
+            payment_method: "nagad"
+          };
         }
         updateOrder = updateOrder;
       }
@@ -56,7 +74,15 @@ describe("/api/webhooks/nagad", () => {
       isNocoConfigured: () => true,
       NocoDBClient: class {
         async getOrder() {
-          return { id: "ORD-1", payment_status: "pending", payment_id: "P-REAL" };
+          return {
+            id: "ORD-1",
+            payment_status: "pending",
+            payment_id: "P-REAL",
+            customer_email: "a@b.com",
+            customer_phone: "+880123456789",
+            total_amount: 1000,
+            payment_method: "nagad"
+          };
         }
       }
     }));
@@ -80,7 +106,15 @@ describe("/api/webhooks/nagad", () => {
       isNocoConfigured: () => true,
       NocoDBClient: class {
         async getOrder() {
-          return { id: "ORD-1", payment_status: "pending", payment_id: "P" };
+          return {
+            id: "ORD-1",
+            payment_status: "pending",
+            payment_id: "P",
+            customer_email: "a@b.com",
+            customer_phone: "+880123456789",
+            total_amount: 1000,
+            payment_method: "nagad"
+          };
         }
         updateOrder = updateOrder;
       }

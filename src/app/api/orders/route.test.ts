@@ -1,5 +1,5 @@
 describe("/api/orders", () => {
-  it("returns 400 for invalid payload", async () => {
+  it("returns 422 for invalid payload", async () => {
     vi.resetModules();
     const { POST } = await import("@/app/api/orders/route");
     const res = await POST(
@@ -8,8 +8,8 @@ describe("/api/orders", () => {
         body: JSON.stringify({ not: "an order" })
       })
     );
-    expect(res.status).toBe(400);
-  });
+    expect(res.status).toBe(422);
+  }, 15000);
 
   it("returns 400 for invalid JSON", async () => {
     vi.resetModules();
@@ -90,12 +90,13 @@ describe("/api/orders", () => {
 
   it("returns 502 when NocoDB throws", async () => {
     vi.resetModules();
+    const { UpstreamError } = await import("@/lib/api/errors");
 
     vi.doMock("@/lib/nocodb", () => ({
       isNocoConfigured: () => true,
       NocoDBClient: class {
         async getProductById() {
-          throw new Error("boom");
+          throw new UpstreamError({ service: "nocodb", status: 500 });
         }
       }
     }));

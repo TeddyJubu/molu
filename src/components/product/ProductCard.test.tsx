@@ -1,5 +1,4 @@
 import { fireEvent, render, screen } from "@testing-library/react";
-import { ProductCard } from "@/components/product/ProductCard";
 
 describe("ProductCard", () => {
   const product = {
@@ -8,20 +7,33 @@ describe("ProductCard", () => {
     price: 500,
     sizes: ["6M", "12M"],
     colors: ["White"],
-    image: null
+    image: "http://example.test/img.jpg",
+    category: "Clothing",
+    rating: 4.8,
+    reviews: 10,
+    isNew: false,
+    isSale: false,
+    description: "Soft onesie"
   };
 
-  it("renders product name and price", () => {
+  it("renders product name and price", async () => {
+    vi.resetModules();
+    const { ProductCard } = await import("@/components/product/ProductCard");
     render(<ProductCard product={product} />);
     expect(screen.getByText("Baby Onesie")).toBeInTheDocument();
     expect(screen.getByText("৳500")).toBeInTheDocument();
   });
 
-  it("calls onAddToCart when button clicked", () => {
-    const onAddToCart = vi.fn();
-    render(<ProductCard product={product} onAddToCart={onAddToCart} />);
-    fireEvent.click(screen.getByRole("button", { name: "Add to Cart" }));
-    expect(onAddToCart).toHaveBeenCalledWith(
+  it("adds item to cart when button clicked", async () => {
+    vi.resetModules();
+    const addItem = vi.fn();
+    vi.doMock("@/store/cart", () => ({
+      useCart: (selector: any) => selector({ addItem })
+    }));
+    const { ProductCard } = await import("@/components/product/ProductCard");
+    render(<ProductCard product={product} />);
+    fireEvent.click(screen.getByRole("button", { name: "Quick Add" }));
+    expect(addItem).toHaveBeenCalledWith(
       expect.objectContaining({
         productId: "1",
         size: "6M",
@@ -29,10 +41,13 @@ describe("ProductCard", () => {
         quantity: 1
       })
     );
+    vi.unmock("@/store/cart");
   });
 
-  it("disables button when onAddToCart missing", () => {
+  it("renders quick add button", async () => {
+    vi.resetModules();
+    const { ProductCard } = await import("@/components/product/ProductCard");
     render(<ProductCard product={product} />);
-    expect(screen.getByRole("button", { name: "Add to Cart" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Quick Add" })).toBeInTheDocument();
   });
 });
