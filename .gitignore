@@ -1,0 +1,11 @@
+.env.local
+.env.*.local
+.nocodb-seed
+.nocodb
+nocodb
+nocodb-data
+*.sqlite
+*.sqlite3
+*.db
+.next
+node_modules
