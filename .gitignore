@@ -11,3 +11,4 @@ nocodb-data
 node_modules
 playwright-report
 test-results
+.trae/documents
