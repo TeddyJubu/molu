@@ -245,7 +245,7 @@ describe("NocoDBClient", () => {
 
     const client = new NocoDBClient();
     const list = await client.listProductsAdmin();
-    expect(list[0].row_id).toBe("10");
+    expect(list[0]?.id).toBe("1");
     const updated = await client.updateProduct("1", { is_active: false });
     expect(updated.sizes).toEqual(["6M", "9M"]);
     expect(updated.colors).toEqual(["White", "Blue"]);

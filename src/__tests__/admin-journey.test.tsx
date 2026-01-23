@@ -87,9 +87,9 @@ describe("admin journey", () => {
     expect(screen.getByText("ORD-DEMO-002")).toBeInTheDocument();
     expect(screen.getByText("Amina Rahman")).toBeInTheDocument();
     expect(screen.getByText("Tanvir Ahmed")).toBeInTheDocument();
-    expect(screen.getByText("Pending")).toBeInTheDocument();
-    expect(screen.getByText("Confirmed")).toBeInTheDocument();
-    expect(screen.getByText("Paid")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Pending" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Confirmed" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Paid" })).toBeInTheDocument();
   });
 
   it("renders order details and items", async () => {
@@ -126,8 +126,8 @@ describe("admin journey", () => {
 
   it("renders products list", async () => {
     const listProductsAdmin = vi.fn().mockResolvedValue([
-      { row_id: "row-1", id: "1", name: "Onesie", price: 500, is_active: true },
-      { row_id: "row-2", id: "2", name: "Socks Pack", price: 180, is_active: false }
+      { id: "1", name: "Onesie", price: 500, sizes: [], colors: [], is_active: true },
+      { id: "2", name: "Socks Pack", price: 180, sizes: [], colors: [], is_active: false }
     ]);
 
     vi.doMock("@/lib/nocodb", () => ({
@@ -143,17 +143,21 @@ describe("admin journey", () => {
     expect(screen.getByText("Products")).toBeInTheDocument();
     expect(screen.getByText("Onesie")).toBeInTheDocument();
     expect(screen.getByText("Socks Pack")).toBeInTheDocument();
-    expect(screen.getByText("Yes")).toBeInTheDocument();
-    expect(screen.getByText("No")).toBeInTheDocument();
+    expect(screen.getByText("Active")).toBeInTheDocument();
+    expect(screen.getByText("Inactive")).toBeInTheDocument();
   });
 
   it("updates order status via extracted server action", async () => {
     const updateOrder = vi.fn().mockResolvedValue({});
+    const getOrder = vi.fn().mockResolvedValue(
+      order({ id: "ORD-DEMO-001", customer_phone: "+8801700000000", order_status: "confirmed" })
+    );
 
     vi.doMock("@/lib/nocodb", () => ({
       isNocoConfigured: () => true,
       NocoDBClient: class {
         updateOrder = updateOrder;
+        getOrder = getOrder;
       }
     }));
 
