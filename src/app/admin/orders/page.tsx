@@ -1,14 +1,11 @@
 import Link from "next/link";
 import { isNocoConfigured, NocoDBClient } from "@/lib/nocodb";
-import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { asErrorMessage } from "@/lib/api/errors";
 import { Order } from "@/types";
-import { updateOrderStatusAction } from "@/app/admin/_actions";
+import { OrderStatusSelect } from "@/components/admin/order-status-select";
 
 export const dynamic = "force-dynamic";
-
-const orderStatuses = ["pending", "confirmed", "shipped", "delivered", "cancelled"] as const;
 
 export default async function AdminOrdersPage({
   searchParams
@@ -89,29 +86,9 @@ export default async function AdminOrdersPage({
               <TableCell className="capitalize">{o.payment_status}</TableCell>
               <TableCell className="capitalize">{o.order_status}</TableCell>
               <TableCell className="text-right">
-                <form action={updateOrderStatusAction}>
-                  <input type="hidden" name="orderId" value={o.id} />
-                  <div className="flex items-center justify-end gap-2">
-                    <label className="sr-only" htmlFor={`status-${o.id}`}>
-                      Order status
-                    </label>
-                    <select
-                      id={`status-${o.id}`}
-                      name="order_status"
-                      defaultValue={o.order_status}
-                      className="h-9 rounded border bg-background px-2 text-sm"
-                    >
-                      {orderStatuses.map((s) => (
-                        <option key={s} value={s}>
-                          {s}
-                        </option>
-                      ))}
-                    </select>
-                    <Button type="submit" size="sm" variant="secondary">
-                      Update
-                    </Button>
-                  </div>
-                </form>
+                <div className="flex justify-end">
+                  <OrderStatusSelect orderId={o.id} currentStatus={o.order_status} />
+                </div>
               </TableCell>
             </TableRow>
           ))}
