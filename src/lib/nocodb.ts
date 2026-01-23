@@ -90,14 +90,6 @@ const orderItemSchema = z
   .refine((v) => Boolean(v.id ?? v.row_id), { path: ["id"], message: "Missing id" })
   .transform(({ id, row_id, ...rest }) => ({ id: id ?? (row_id as string), ...rest }));
 
-const productAdminSchema = z.object({
-  row_id: z.union([z.string(), z.number()]).transform(String),
-  id: z.union([z.string(), z.number()]).transform(String),
-  name: z.string(),
-  price: z.number(),
-  is_active: z.preprocess(asBoolean, z.boolean()).optional()
-});
-
 function requiredEnv(name: string) {
   const value = process.env[name];
   if (!value) throw new ConfigError(`${name} is required`);
@@ -187,14 +179,10 @@ export class NocoDBClient {
     const page = params.page ?? 1;
     const offset = Math.max(0, (page - 1) * limit);
 
-    const raw = await this.requestJson<unknown>(`/api/v1/db/data/v1/${this.projectId}/products`, undefined, {
-      limit,
-      offset,
-      fields: "row_id,id,name,price,is_active"
-    });
+    const raw = await this.requestJson<unknown>(`/api/v1/db/data/v1/${this.projectId}/products`, undefined, { limit, offset });
 
     const parsed = listResponseSchema.parse(raw);
-    return z.array(productAdminSchema).parse(parsed.list);
+    return z.array(productSchema).parse(parsed.list) as Product[];
   }
 
   async getProductById(id: string) {
@@ -218,6 +206,48 @@ export class NocoDBClient {
       body: JSON.stringify(patch)
     });
     return productSchema.parse(raw) as Product;
+  }
+
+  async createProduct(product: Partial<Product>) {
+    const raw = await this.requestJson<unknown>(`/api/v1/db/data/v1/${this.projectId}/products`, {
+      method: "POST",
+      body: JSON.stringify(product)
+    });
+    return productSchema.parse(raw) as Product;
+  }
+
+  async deleteProduct(id: string) {
+    return this.updateProduct(id, { is_active: false });
+  }
+
+  async updateInventory(id: string, patch: Partial<InventoryItem>) {
+    try {
+      const raw = await this.requestJson<unknown>(
+        `/api/v1/db/data/v1/${this.projectId}/product_inventory/${encodeURIComponent(id)}`,
+        {
+          method: "PATCH",
+          body: JSON.stringify(patch)
+        }
+      );
+      return inventoryItemSchema.parse(raw) as InventoryItem;
+    } catch (error) {
+      const row = await this.requestJson<unknown>(`/api/v1/db/data/v1/${this.projectId}/product_inventory/find-one`, undefined, {
+        where: `(id,eq,${id})`,
+        fields: "row_id"
+      });
+      const rowId =
+        typeof (row as any)?.row_id === "number" || typeof (row as any)?.row_id === "string" ? String((row as any).row_id) : null;
+      if (!rowId) throw error;
+
+      const raw = await this.requestJson<unknown>(
+        `/api/v1/db/data/v1/${this.projectId}/product_inventory/${encodeURIComponent(rowId)}`,
+        {
+          method: "PATCH",
+          body: JSON.stringify(patch)
+        }
+      );
+      return inventoryItemSchema.parse(raw) as InventoryItem;
+    }
   }
 
   async listProductImages(productId: string) {
