@@ -140,7 +140,6 @@ export class NocoDBClient {
       return (await res.json()) as T;
     } catch (error) {
       if (error instanceof NotFoundError || error instanceof UpstreamError) throw error;
-      console.error("NocoDB fetch failed:", error);
       throw new UpstreamError({
         service: "nocodb",
         status: 503,

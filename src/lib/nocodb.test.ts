@@ -274,4 +274,13 @@ describe("NocoDBClient", () => {
     const client = new NocoDBClient();
     await expect(client.listProducts()).rejects.toBeInstanceOf(UpstreamError);
   });
+
+  it("maps fetch failures to a friendly UpstreamError", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("fetch failed")));
+    const client = new NocoDBClient();
+    await expect(client.listProducts()).rejects.toMatchObject({
+      service: "nocodb",
+      message: expect.stringMatching(/NocoDB is not reachable/)
+    });
+  });
 });

@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { isNocoConfigured, NocoDBClient } from "@/lib/nocodb";
+import { ConfigError } from "@/lib/api/errors";
 import { notifyOrderStatusChanged } from "@/lib/notifications/events";
 
 export async function updateOrderStatusAction(formData: FormData) {
@@ -29,7 +30,9 @@ export async function updateOrderStatusAction(formData: FormData) {
 }
 
 export async function createProductAction(formData: FormData) {
-  if (!isNocoConfigured()) return;
+  if (!isNocoConfigured()) {
+    throw new ConfigError("NocoDB is not configured. Set NOCODB_API_URL, NOCODB_API_TOKEN, NOCODB_PROJECT_ID.");
+  }
   const nocodb = new NocoDBClient();
   
   const name = String(formData.get("name"));
@@ -59,7 +62,9 @@ export async function createProductAction(formData: FormData) {
 }
 
 export async function updateProductDetailsAction(formData: FormData) {
-  if (!isNocoConfigured()) return;
+  if (!isNocoConfigured()) {
+    throw new ConfigError("NocoDB is not configured. Set NOCODB_API_URL, NOCODB_API_TOKEN, NOCODB_PROJECT_ID.");
+  }
   const nocodb = new NocoDBClient();
   
   const id = String(formData.get("id"));

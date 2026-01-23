@@ -107,7 +107,8 @@ export function ProductForm({
       }
       onSuccess?.();
     } catch (error) {
-      toast.error("Failed to save product");
+      const message = error instanceof Error ? error.message : "Failed to save product";
+      toast.error(message);
     }
   }
 
