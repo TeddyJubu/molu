@@ -205,3 +205,35 @@ export async function notifyPaymentFailed(params: {
     } catch {}
   }
 }
+
+export async function notifyOrderStatusChanged(params: { orderId: string; phone: string; status: string }) {
+  const normalizedStatus = params.status.trim().toLowerCase();
+  const templateEnvName =
+    normalizedStatus === "confirmed"
+      ? "WHATSAPP_TEMPLATE_ORDER_CONFIRMED"
+      : normalizedStatus === "shipped"
+        ? "WHATSAPP_TEMPLATE_ORDER_SHIPPED"
+        : normalizedStatus === "delivered"
+          ? "WHATSAPP_TEMPLATE_ORDER_DELIVERED"
+          : null;
+
+  if (!templateEnvName) return;
+
+  const waTemplate = templateId(templateEnvName);
+  const waTo = normalizeWhatsAppTo(params.phone);
+
+  if (!waTemplate || !waTo) return;
+
+  try {
+    await sendWhatsAppTemplateMessage({
+      to: waTo,
+      templateName: waTemplate,
+      components: [
+        {
+          type: "body",
+          parameters: [{ type: "text", text: params.orderId }]
+        }
+      ]
+    });
+  } catch {}
+}
