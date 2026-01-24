@@ -6,6 +6,9 @@ import { ConfigError } from "@/lib/api/errors";
 import { notifyOrderStatusChanged } from "@/lib/notifications/events";
 import { z } from "zod";
 import type { ProductVariation } from "@/types";
+import { mkdir, writeFile } from "node:fs/promises";
+import path from "node:path";
+import { randomUUID } from "node:crypto";
 
 const productOptionsInputSchema = z.array(
   z.object({
@@ -156,6 +159,69 @@ export async function createProductAction(formData: FormData) {
 
   await nocodb.replaceProductOptions(created.id, normalizedOptions);
   await nocodb.replaceProductVariants(created.id, normalizedVariants);
+
+  const rawFiles = formData.getAll("images");
+  const files = rawFiles.filter(
+    (v): v is File =>
+      typeof (v as any)?.arrayBuffer === "function" &&
+      typeof (v as any)?.type === "string" &&
+      typeof (v as any)?.name === "string" &&
+      Number((v as any)?.size ?? 0) > 0
+  );
+  const featuredIndexRaw = Number(formData.get("featuredIndex") ?? 0);
+
+  if (files.length) {
+    if (files.length > 8) throw new ConfigError("Too many images (max 8)");
+
+    const uploadDir = path.join(process.cwd(), "public", "uploads", "products", created.id);
+    await mkdir(uploadDir, { recursive: true });
+
+    const safeFeaturedIndex = Number.isFinite(featuredIndexRaw) ? Math.max(0, Math.min(files.length - 1, featuredIndexRaw)) : 0;
+
+    const extFromMime = (mime: string) => {
+      const m = String(mime || "").toLowerCase();
+      if (m === "image/jpeg") return "jpg";
+      if (m === "image/png") return "png";
+      if (m === "image/webp") return "webp";
+      if (m === "image/gif") return "gif";
+      return "";
+    };
+
+    const extFromName = (name: string) => {
+      const n = String(name || "");
+      const idx = n.lastIndexOf(".");
+      if (idx < 0) return "";
+      return n.slice(idx + 1).toLowerCase().replace(/[^a-z0-9]/g, "").slice(0, 8);
+    };
+
+    const uploaded = [];
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i]!;
+      const type = String(file.type || "");
+      if (!type.startsWith("image/")) throw new ConfigError("Only image uploads are supported");
+      if (file.size > 5 * 1024 * 1024) throw new ConfigError("Each image must be <= 5MB");
+
+      const ext = extFromMime(type) || extFromName(file.name) || "png";
+      const filename = `${randomUUID()}.${ext}`;
+      const fullPath = path.join(uploadDir, filename);
+      const bytes = Buffer.from(await file.arrayBuffer());
+      await writeFile(fullPath, bytes);
+
+      uploaded.push({
+        url: `/uploads/products/${created.id}/${filename}`,
+        index: i
+      });
+    }
+
+    await nocodb.createProductImages(
+      created.id,
+      uploaded.map((u) => ({
+        image_url: u.url,
+        display_order: u.index,
+        is_primary: u.index === safeFeaturedIndex
+      }))
+    );
+  }
 
   revalidatePath("/admin/products");
   revalidatePath("/products");

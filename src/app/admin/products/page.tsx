@@ -13,11 +13,13 @@ export default async function AdminProductsPage() {
   }
 
   let products: Product[] = [];
+  let featuredById: Map<string, string> = new Map();
   let error: string | null = null;
 
   try {
     const nocodb = new NocoDBClient();
     products = await nocodb.listProductsAdmin({ page: 1, pageSize: 200 });
+    featuredById = await nocodb.listFeaturedImages(products.map((p) => p.id));
   } catch (e) {
     error = asErrorMessage(e);
   }
@@ -42,6 +44,7 @@ export default async function AdminProductsPage() {
       <Table>
         <TableHeader>
           <TableRow>
+            <TableHead>Image</TableHead>
             <TableHead>ID</TableHead>
             <TableHead>Name</TableHead>
             <TableHead>Price</TableHead>
@@ -52,6 +55,17 @@ export default async function AdminProductsPage() {
         <TableBody>
           {products.map((p) => (
             <TableRow key={p.id}>
+              <TableCell>
+                {featuredById.get(p.id) ? (
+                  <img
+                    src={featuredById.get(p.id)}
+                    alt={`${p.name} featured`}
+                    className="h-10 w-10 rounded object-cover"
+                  />
+                ) : (
+                  <div className="h-10 w-10 rounded bg-muted" />
+                )}
+              </TableCell>
               <TableCell className="font-mono text-xs">{p.id}</TableCell>
               <TableCell className="font-medium">
                 <div className="flex flex-col">
@@ -77,7 +91,7 @@ export default async function AdminProductsPage() {
           ))}
           {products.length === 0 ? (
             <TableRow>
-              <TableCell colSpan={5} className="py-10 text-center text-sm text-muted-foreground">
+              <TableCell colSpan={6} className="py-10 text-center text-sm text-muted-foreground">
                 No products found.
               </TableCell>
             </TableRow>

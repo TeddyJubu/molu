@@ -484,6 +484,37 @@ describe("NocoDBClient (Ecom schema profile)", () => {
     expect(String(fetchMock.mock.calls[1]?.[0] ?? "")).toContain("mprodvars");
   });
 
+  it("maps createProductImages payload for Ecom base", async () => {
+    vi.stubGlobal("fetch", vi.fn());
+    const fetchMock = vi.mocked(fetch);
+
+    fetchMock
+      .mockResolvedValueOnce(
+        okJson({
+          list: [{ id: "mimg", title: "Product Images", table_name: "product_images" }]
+        })
+      )
+      .mockImplementationOnce(async (_url, init) => {
+        const body = JSON.parse(String(init?.body ?? "{}"));
+        return okJson({
+          Id: 1,
+          Products_id: body.Products_id,
+          "Image URL": body["Image URL"],
+          "Display Order": body["Display Order"],
+          "Is Thumbnail": body["Is Thumbnail"]
+        });
+      });
+
+    const client = new NocoDBClient();
+    const created = await client.createProductImages("2", [
+      { image_url: "http://example.test/a.jpg", display_order: 0, is_primary: true }
+    ]);
+    expect(created[0]).toMatchObject({ product_id: "2", image_url: "http://example.test/a.jpg", display_order: 0, is_primary: true });
+
+    const body1 = JSON.parse(String(fetchMock.mock.calls[1]?.[1]?.body ?? "{}"));
+    expect(body1).toMatchObject({ Products_id: 2, "Image URL": "http://example.test/a.jpg", "Display Order": 0, "Is Thumbnail": true });
+  });
+
   it("maps product_variations to inventory when available", async () => {
     vi.stubGlobal("fetch", vi.fn());
     const fetchMock = vi.mocked(fetch);

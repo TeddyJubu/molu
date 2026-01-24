@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Label } from "@/components/ui/label";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { X, Plus } from "lucide-react";
 import { createProductAction, getProductVariantConfigurationAction, updateProductDetailsAction } from "@/app/admin/_actions";
@@ -43,6 +43,12 @@ type VariantDraft = {
   price: number | null;
 };
 
+type ImageDraft = {
+  id: string;
+  file: File;
+  previewUrl: string;
+};
+
 export function ProductForm({
   defaultValues,
   onSuccess
@@ -63,11 +69,24 @@ export function ProductForm({
 
   const productId = defaultValues?.id ? String(defaultValues.id) : "";
 
+  const [images, setImages] = useState<ImageDraft[]>([]);
+  const [featuredImageId, setFeaturedImageId] = useState<string | null>(null);
+  const imagesRef = useRef<ImageDraft[]>([]);
   const [options, setOptions] = useState<OptionDraft[]>([]);
   const [newValueByOption, setNewValueByOption] = useState<Record<number, string>>({});
   const [variants, setVariants] = useState<VariantDraft[]>([{ options: {}, stock_qty: 0, price: null }]);
   const [isLoadingConfig, setIsLoadingConfig] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+
+  useEffect(() => {
+    imagesRef.current = images;
+  }, [images]);
+
+  useEffect(() => {
+    return () => {
+      for (const img of imagesRef.current) URL.revokeObjectURL(img.previewUrl);
+    };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -111,6 +130,31 @@ export function ProductForm({
       position: o.position ?? idx
     }))
     .filter((o) => o.name.length > 0 && o.values.length > 0);
+
+  const addImages = (fileList: FileList | null) => {
+    const nextFiles = Array.from(fileList ?? []);
+    if (!nextFiles.length) return;
+    setImages((prev) => {
+      const remaining = Math.max(0, 8 - prev.length);
+      const picked = nextFiles.slice(0, remaining);
+      const drafts = picked
+        .filter((f) => f.size > 0)
+        .map((file) => ({ id: crypto.randomUUID(), file, previewUrl: URL.createObjectURL(file) }));
+      const merged = [...prev, ...drafts];
+      if (!featuredImageId && merged[0]) setFeaturedImageId(merged[0].id);
+      return merged;
+    });
+  };
+
+  const removeImage = (id: string) => {
+    setImages((prev) => {
+      const removed = prev.find((p) => p.id === id);
+      if (removed) URL.revokeObjectURL(removed.previewUrl);
+      const next = prev.filter((p) => p.id !== id);
+      if (featuredImageId === id) setFeaturedImageId(next[0]?.id ?? null);
+      return next;
+    });
+  };
 
   const addOption = (name = "") => {
     setOptions((prev) => [...prev, { name, values: [], position: prev.length }]);
@@ -232,14 +276,6 @@ export function ProductForm({
 
   async function onSubmit(data: ProductFormValues) {
     if (isSaving) return;
-    setIsSaving(true);
-    const formData = new FormData();
-    if (data.id) formData.append("id", data.id);
-    formData.append("name", data.name);
-    formData.append("price", String(Number(data.price)));
-    formData.append("description", data.description || "");
-    formData.append("brand", data.brand || "");
-
     const optionsPayload = normalizedOptions.map((o) => ({
       name: o.name,
       values: o.values,
@@ -289,10 +325,20 @@ export function ProductForm({
       variantsPayload.splice(0, variantsPayload.length, { options: {}, stock_qty: only.stock_qty, price: only.price });
     }
 
+    const formData = new FormData();
+    if (data.id) formData.append("id", data.id);
+    formData.append("name", data.name);
+    formData.append("price", String(Number(data.price)));
+    formData.append("description", data.description || "");
+    formData.append("brand", data.brand || "");
     formData.append("options", JSON.stringify(optionsPayload));
     formData.append("variants", JSON.stringify(variantsPayload));
+    for (const img of images) formData.append("images", img.file, img.file.name);
+    const featuredIndex = images.length ? Math.max(0, images.findIndex((img) => img.id === featuredImageId)) : 0;
+    formData.append("featuredIndex", String(featuredIndex < 0 ? 0 : featuredIndex));
 
     try {
+      setIsSaving(true);
       if (data.id) {
         await updateProductDetailsAction(formData);
         toast.success("Product updated");
@@ -375,6 +421,50 @@ export function ProductForm({
             </FormItem>
           )}
         />
+
+        {!productId ? (
+          <div className="space-y-3 pt-2">
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex flex-col">
+                <div className="text-sm font-medium">Images</div>
+                <div className="text-xs text-muted-foreground">Upload photos and choose one featured image.</div>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="text-xs text-muted-foreground">{images.length}/8</div>
+              </div>
+            </div>
+
+            <Input type="file" accept="image/*" multiple onChange={(e) => addImages(e.target.files)} />
+
+            {images.length ? (
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                {images.map((img, idx) => (
+                  <div key={img.id} className="rounded border p-2">
+                    <div className="aspect-square overflow-hidden rounded">
+                      <img src={img.previewUrl} alt={`Upload ${idx + 1}`} className="h-full w-full object-cover" />
+                    </div>
+                    <div className="mt-2 flex items-center justify-between gap-2">
+                      <label className="flex items-center gap-2 text-xs">
+                        <input
+                          type="radio"
+                          name="featured-image"
+                          checked={(featuredImageId ?? images[0]?.id) === img.id}
+                          onChange={() => setFeaturedImageId(img.id)}
+                        />
+                        Featured
+                      </label>
+                      <Button type="button" variant="outline" size="sm" className="text-red-600" onClick={() => removeImage(img.id)}>
+                        Remove
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="rounded border bg-muted/30 p-3 text-sm text-muted-foreground">No images selected yet.</div>
+            )}
+          </div>
+        ) : null}
 
         <div className="space-y-3 pt-2">
           <div className="flex items-center justify-between gap-3">

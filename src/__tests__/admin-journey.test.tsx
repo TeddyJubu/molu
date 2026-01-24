@@ -129,11 +129,13 @@ describe("admin journey", () => {
       { id: "1", name: "Onesie", price: 500, sizes: [], colors: [], is_active: true },
       { id: "2", name: "Socks Pack", price: 180, sizes: [], colors: [], is_active: false }
     ]);
+    const listFeaturedImages = vi.fn().mockResolvedValue(new Map([["1", "/uploads/products/1/featured.jpg"]]));
 
     vi.doMock("@/lib/nocodb", () => ({
       isNocoConfigured: () => true,
       NocoDBClient: class {
         listProductsAdmin = listProductsAdmin;
+        listFeaturedImages = listFeaturedImages;
       }
     }));
 
@@ -145,6 +147,7 @@ describe("admin journey", () => {
     expect(screen.getByText("Socks Pack")).toBeInTheDocument();
     expect(screen.getByText("Active")).toBeInTheDocument();
     expect(screen.getByText("Inactive")).toBeInTheDocument();
+    expect(screen.getByAltText("Onesie featured")).toBeInTheDocument();
   });
 
   it("updates order status via extracted server action", async () => {

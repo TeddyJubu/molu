@@ -376,8 +376,20 @@ export class NocoDBClient {
       ]
     });
 
+    const productImagesTableId = await ensureTable({
+      title: "Product Images",
+      table_name: "product_images",
+      columns: [
+        { title: "Id", column_name: "Id", uidt: "ID" },
+        { title: "Products_id", column_name: "Products_id", uidt: "Number" },
+        { title: "Image URL", column_name: "image_url", uidt: "SingleLineText" },
+        { title: "Display Order", column_name: "display_order", uidt: "Number" },
+        { title: "Is Thumbnail", column_name: "is_primary", uidt: "Checkbox" }
+      ]
+    });
+
     await ensureColumn(productVariantsTableId, { title: "Price", column_name: "price", uidt: "Number" });
-    if (productOptionsTableId || productVariantsTableId) this.tableIdByTitle = null;
+    if (productOptionsTableId || productVariantsTableId || productImagesTableId) this.tableIdByTitle = null;
   }
 
   private async resolveTableSegment(tableTitle: string) {
@@ -426,6 +438,11 @@ export class NocoDBClient {
 
   private whereEq(fieldTitle: string, value: string | number | boolean) {
     return `(${quoteWhereField(fieldTitle)},eq,${quoteWhereValue(value)})`;
+  }
+
+  private whereIn(fieldTitle: string, values: Array<string | number | boolean>) {
+    const parts = values.map((v) => quoteWhereValue(v)).join(",");
+    return `(${quoteWhereField(fieldTitle)},in,${parts})`;
   }
 
   private parseProduct(row: unknown) {
@@ -716,6 +733,98 @@ export class NocoDBClient {
     const parsed = listResponseSchema.parse(raw);
     const images = parsed.list.map((row) => this.parseProductImage(row));
     return images.sort((a, b) => (a.display_order ?? 0) - (b.display_order ?? 0));
+  }
+
+  async createProductImages(
+    productId: string,
+    images: Array<{ image_url: string; display_order?: number | null; is_primary?: boolean | null }>
+  ) {
+    const normalized = images
+      .map((img, idx) => ({
+        image_url: String(img.image_url ?? "").trim(),
+        display_order: img.display_order ?? idx,
+        is_primary: Boolean(img.is_primary)
+      }))
+      .filter((img) => Boolean(img.image_url));
+
+    if (!normalized.length) return [];
+
+    try {
+      const created: ProductImage[] = [];
+      for (const img of normalized) {
+        const body =
+          this.schemaProfile === "ecom"
+            ? {
+                Products_id: Number(productId),
+                "Image URL": img.image_url,
+                "Display Order": img.display_order ?? 0,
+                "Is Thumbnail": img.is_primary
+              }
+            : {
+                product_id: productId,
+                image_url: img.image_url,
+                display_order: img.display_order ?? 0,
+                is_primary: img.is_primary
+              };
+
+        const raw = await this.dataRequestJson<unknown>("product_images", "", {
+          method: "POST",
+          body: JSON.stringify(body)
+        });
+        created.push(this.parseProductImage(raw));
+      }
+      return created.sort((a, b) => (a.display_order ?? 0) - (b.display_order ?? 0));
+    } catch (error) {
+      if (error instanceof ConfigError && String(error.message ?? "").includes("product_images")) {
+        await this.ensureEcomOptionAndVariantTables();
+        return this.createProductImages(productId, images);
+      }
+      throw error;
+    }
+  }
+
+  async listFeaturedImages(productIds: string[]) {
+    const ids = Array.from(new Set(productIds.map((id) => String(id)).filter(Boolean)));
+    if (!ids.length) return new Map<string, string>();
+
+    try {
+      const where =
+        this.schemaProfile === "ecom"
+          ? this.whereIn(
+              "Products_id",
+              ids.map((id) => Number(id)).filter((n) => Number.isFinite(n))
+            )
+          : this.whereIn("product_id", ids);
+
+      const raw = await this.dataRequestJson<unknown>("product_images", "", undefined, {
+        where,
+        limit: 1000,
+        offset: 0
+      });
+      const parsed = listResponseSchema.parse(raw);
+      const rows = parsed.list.map((row) => this.parseProductImage(row));
+
+      const byProduct = new Map<string, ProductImage[]>();
+      for (const img of rows) {
+        const list = byProduct.get(img.product_id) ?? [];
+        list.push(img);
+        byProduct.set(img.product_id, list);
+      }
+
+      const out = new Map<string, string>();
+      for (const id of ids) {
+        const list = (byProduct.get(id) ?? []).slice().sort((a, b) => (a.display_order ?? 0) - (b.display_order ?? 0));
+        const featured = list.find((i) => Boolean(i.is_primary)) ?? list[0] ?? null;
+        if (featured?.image_url) out.set(id, featured.image_url);
+      }
+      return out;
+    } catch (error) {
+      if (error instanceof ConfigError && String(error.message ?? "").includes("product_images")) {
+        await this.ensureEcomOptionAndVariantTables();
+        return this.listFeaturedImages(productIds);
+      }
+      throw error;
+    }
   }
 
   async listInventory(productId: string) {
