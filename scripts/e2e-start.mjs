@@ -57,6 +57,18 @@ async function main() {
 
   const nocoUrl = (process.env.NOCODB_API_URL ?? "http://localhost:8080").replace(/\/+$/, "");
   if (!process.env.NOCODB_URL) process.env.NOCODB_URL = nocoUrl;
+  const allowLocalSeed = process.env.NOCODB_USE_LOCAL_SEED === "true";
+  const allowBootstrap = process.env.NOCODB_AUTO_BOOTSTRAP === "true" || allowLocalSeed;
+  const allowDestructiveSetup = process.env.NOCODB_ALLOW_DESTRUCTIVE_SETUP === "true";
+  const isLocal = (() => {
+    try {
+      const url = new URL(nocoUrl);
+      return url.hostname === "localhost" || url.hostname === "127.0.0.1";
+    } catch {
+      return false;
+    }
+  })();
+  const cloudMode = process.env.NOCODB_CLOUD === "true" || !isLocal;
 
   const children = [];
   const shutdown = () => {
@@ -68,6 +80,11 @@ async function main() {
   const healthUrl = `${nocoUrl}/api/v1/health`;
   const healthRes = await fetch(healthUrl).catch(() => null);
   if (!healthRes || !healthRes.ok) {
+    if (cloudMode || !allowLocalSeed) {
+      throw new Error(
+        `NocoDB is not reachable at ${nocoUrl}. Set NOCODB_USE_LOCAL_SEED=true to start .nocodb-seed locally, or fix your Cloud URL.`
+      );
+    }
     const port = new URL(nocoUrl).port || "8080";
     const seed = spawn("npm", ["run", "start"], {
       stdio: "inherit",
@@ -80,32 +97,39 @@ async function main() {
     if (!ok) throw new Error(`NocoDB did not become healthy at ${nocoUrl}`);
   }
 
-  const bootstrapOut = execSync("node scripts/noco-bootstrap.mjs", {
-    env: process.env,
-    encoding: "utf8"
-  });
-  const token = bootstrapOut
-    .split(/\r?\n/)
-    .map((l) => l.trim())
-    .find((l) => l.startsWith("xc_auth="))
-    ?.slice("xc_auth=".length);
-  const baseId = bootstrapOut
-    .split(/\r?\n/)
-    .map((l) => l.trim())
-    .find((l) => l.startsWith("base_id="))
-    ?.slice("base_id=".length);
+  if (!process.env.NOCODB_API_TOKEN || !process.env.NOCODB_PROJECT_ID) {
+    if (!allowBootstrap) {
+      throw new Error("Missing NOCODB_API_TOKEN or NOCODB_PROJECT_ID and auto bootstrap is disabled.");
+    }
+    const bootstrapOut = execSync("node scripts/noco-bootstrap.mjs", {
+      env: process.env,
+      encoding: "utf8"
+    });
+    const token = bootstrapOut
+      .split(/\r?\n/)
+      .map((l) => l.trim())
+      .find((l) => l.startsWith("xc_auth="))
+      ?.slice("xc_auth=".length);
+    const baseId = bootstrapOut
+      .split(/\r?\n/)
+      .map((l) => l.trim())
+      .find((l) => l.startsWith("base_id="))
+      ?.slice("base_id=".length);
 
-  if (!token) throw new Error("NocoDB bootstrap did not return xc_auth token");
-  if (!baseId) throw new Error("NocoDB bootstrap did not return base_id");
+    if (!token) throw new Error("NocoDB bootstrap did not return xc_auth token");
+    if (!baseId) throw new Error("NocoDB bootstrap did not return base_id");
 
-  process.env.NOCODB_API_TOKEN = token;
-  process.env.NOCODB_PROJECT_ID = baseId;
-  updateEnvFile(envFile, { NOCODB_API_TOKEN: token, NOCODB_PROJECT_ID: baseId });
+    process.env.NOCODB_API_TOKEN = token;
+    process.env.NOCODB_PROJECT_ID = baseId;
+    updateEnvFile(envFile, { NOCODB_API_TOKEN: token, NOCODB_PROJECT_ID: baseId });
+  }
 
-  execSync("node scripts/noco-setup-molu.mjs", {
-    stdio: "inherit",
-    env: process.env
-  });
+  if (allowDestructiveSetup) {
+    execSync("node scripts/noco-setup-molu.mjs", {
+      stdio: "inherit",
+      env: process.env
+    });
+  }
 
   execSync("npm run build", {
     stdio: "inherit",

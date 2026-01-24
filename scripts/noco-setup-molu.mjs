@@ -16,9 +16,24 @@ const env = { ...readEnvFile(".env.local"), ...process.env };
 const baseUrl = (env.NOCODB_API_URL || "http://localhost:8080").replace(/\/+$/, "");
 const token = env.NOCODB_API_TOKEN;
 const projectId = env.NOCODB_PROJECT_ID;
+const allowDestructiveSetup = env.NOCODB_ALLOW_DESTRUCTIVE_SETUP === "true";
+const isLocal = (() => {
+  try {
+    const url = new URL(baseUrl);
+    return url.hostname === "localhost" || url.hostname === "127.0.0.1";
+  } catch {
+    return false;
+  }
+})();
 
 if (!token || !projectId) {
   throw new Error("Missing NOCODB_API_TOKEN or NOCODB_PROJECT_ID in .env.local");
+}
+if (!allowDestructiveSetup) {
+  throw new Error("Refusing to run destructive NocoDB setup. Set NOCODB_ALLOW_DESTRUCTIVE_SETUP=true to proceed.");
+}
+if (!isLocal) {
+  throw new Error(`Refusing to run destructive NocoDB setup against non-local server: ${baseUrl}`);
 }
 
 async function request(path, init) {
