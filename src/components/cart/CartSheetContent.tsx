@@ -44,7 +44,7 @@ export function CartSheetContent({ onNavigate }: { onNavigate?: () => void }) {
         <div className="divide-y">
           {items.map((item) => (
             <CartItem
-              key={`${item.productId}:${item.size}:${item.color}`}
+              key={item.lineKey}
               item={item}
               onRemove={removeItem}
               onQuantityChange={updateQuantity}

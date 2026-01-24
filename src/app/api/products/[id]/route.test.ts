@@ -1,3 +1,5 @@
+import { describe, expect, it, vi } from "vitest";
+
 describe("/api/products/[id]", () => {
   it("returns 503 when NocoDB is not configured", async () => {
     vi.resetModules();
@@ -23,6 +25,9 @@ describe("/api/products/[id]", () => {
         }
         async listInventory() {
           return [];
+        }
+        async getProductVariantConfiguration() {
+          return { options: [], variants: [], source: "none" };
         }
       }
     }));
@@ -51,6 +56,9 @@ describe("/api/products/[id]", () => {
         }
         async listInventory() {
           return [];
+        }
+        async getProductVariantConfiguration() {
+          return { options: [], variants: [], source: "none" };
         }
       }
     }));

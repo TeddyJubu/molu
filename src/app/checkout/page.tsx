@@ -70,8 +70,8 @@ export default function CheckoutPage() {
                       items: items.map((i) => ({
                         productId: i.productId,
                         quantity: i.quantity,
-                        size: i.size,
-                        color: i.color
+                        options: i.options,
+                        variantId: i.variantId
                       })),
                       total_amount: total,
                       payment_method: paymentMethod

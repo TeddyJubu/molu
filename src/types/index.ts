@@ -28,6 +28,31 @@ export interface InventoryItem {
   low_stock_threshold?: number | null;
 }
 
+export type VariantOptions = Record<string, string>;
+
+export interface ProductOption {
+  id: string;
+  product_id: string;
+  name: string;
+  values: string[];
+  position?: number | null;
+}
+
+export interface ProductVariant {
+  id: string;
+  product_id: string;
+  options: VariantOptions;
+  stock_qty: number;
+}
+
+export interface ProductVariation {
+  id: string;
+  product_id: string;
+  age_range: string;
+  color: string;
+  stock_qty: number;
+}
+
 export interface ProductSummary {
   id: string;
   name: string;

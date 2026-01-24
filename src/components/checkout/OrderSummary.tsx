@@ -1,6 +1,7 @@
 "use client";
 
 import type { CartItem } from "@/store/cart";
+import { formatOptions } from "@/lib/variants";
 
 export interface OrderSummaryProps {
   items: CartItem[];
@@ -13,11 +14,11 @@ export function OrderSummary({ items, total }: OrderSummaryProps) {
       <h2 className="text-lg font-semibold">Order Summary</h2>
       <div className="space-y-2">
         {items.map((item) => (
-          <div key={`${item.productId}:${item.size}:${item.color}`} className="flex items-start justify-between gap-3 text-sm">
+          <div key={item.lineKey} className="flex items-start justify-between gap-3 text-sm">
             <div className="min-w-0">
               <p className="truncate font-medium">{item.name}</p>
               <p className="text-gray-600">
-                {item.size} · {item.color} · x{item.quantity}
+                {formatOptions(item.options)} · x{item.quantity}
               </p>
             </div>
             <p className="shrink-0 font-semibold">৳{item.price * item.quantity}</p>
@@ -31,4 +32,3 @@ export function OrderSummary({ items, total }: OrderSummaryProps) {
     </div>
   );
 }
-

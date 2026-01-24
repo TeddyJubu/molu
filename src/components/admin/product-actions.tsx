@@ -1,11 +1,12 @@
 "use client";
 
+import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { ProductForm } from "./product-form";
-import { Plus, Pencil, Trash2 } from "lucide-react";
+import { Plus, Pencil, Trash2, Maximize2 } from "lucide-react";
 import { useState } from "react";
 import { deleteProductAction } from "@/app/admin/_actions";
 import type { Product } from "@/types";
@@ -16,9 +17,7 @@ function toFormValues(product: Product) {
     name: String(product.name ?? ""),
     price: String(product.price ?? "0"),
     description: product.description ?? "",
-    brand: product.brand ?? "",
-    sizes: product.sizes,
-    colors: product.colors
+    brand: product.brand ?? ""
   };
 }
 
@@ -49,8 +48,15 @@ export function EditProductButton({ product }: { product: Product }) {
         </Button>
       </SheetTrigger>
       <SheetContent className="overflow-y-auto w-[400px] sm:w-[540px]">
-        <SheetHeader>
-          <SheetTitle>Edit Product</SheetTitle>
+        <SheetHeader className="pr-8">
+          <div className="flex items-center justify-between">
+            <SheetTitle>Edit Product</SheetTitle>
+            <Button asChild variant="ghost" size="icon" aria-label="Open full-page editor">
+              <Link href={`/admin/products/${encodeURIComponent(product.id)}`}>
+                <Maximize2 className="h-4 w-4" />
+              </Link>
+            </Button>
+          </div>
         </SheetHeader>
         <div className="py-4">
           <ProductForm defaultValues={toFormValues(product)} onSuccess={() => setOpen(false)} />

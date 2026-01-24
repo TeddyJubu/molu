@@ -1,4 +1,5 @@
 import { fireEvent, render, screen } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
 
 describe("ProductCard", () => {
   const product = {
@@ -36,8 +37,7 @@ describe("ProductCard", () => {
     expect(addItem).toHaveBeenCalledWith(
       expect.objectContaining({
         productId: "1",
-        size: "6M",
-        color: "White",
+        options: { "Age Range": "6M", Color: "White" },
         quantity: 1
       })
     );

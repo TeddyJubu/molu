@@ -10,13 +10,14 @@ export async function GET(_request: Request, context: any) {
     const params = await Promise.resolve(context.params);
     const id = params?.id as string;
     const nocodb = new NocoDBClient();
-    const [product, images, inventory] = await Promise.all([
+    const [product, images, inventory, config] = await Promise.all([
       nocodb.getProductById(id),
       nocodb.listProductImages(id),
-      nocodb.listInventory(id)
+      nocodb.listInventory(id),
+      nocodb.getProductVariantConfiguration(id)
     ]);
 
-    return ok({ product, images, inventory });
+    return ok({ product, images, inventory, options: config.options, variants: config.variants, variantSource: config.source });
   } catch (error) {
     return failFromError(error);
   }

@@ -21,10 +21,9 @@ export function ProductDetailView({ product }: { product: Product }) {
       productId: product.id,
       name: product.name,
       price: product.price,
-      size: selectedSize,
-      color: selectedColor,
+      options: { "Age Range": selectedSize, Color: selectedColor },
       quantity,
-      image: product.image,
+      image: product.image
     });
   };
 
@@ -71,7 +70,7 @@ export function ProductDetailView({ product }: { product: Product }) {
 
         <div className="space-y-4">
           <div className="space-y-3">
-            <span className="text-sm font-medium">Select Size</span>
+            <span className="text-sm font-medium">Select Age Range</span>
             <div className="flex flex-wrap gap-3">
               {product.sizes.map((size) => (
                 <button

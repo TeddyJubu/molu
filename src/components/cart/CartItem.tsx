@@ -4,15 +4,16 @@ import Image from "next/image";
 import type { CartItem as CartLine } from "@/store/cart";
 import { Button } from "@/components/ui/button";
 import { Minus, Plus, Trash2 } from "lucide-react";
+import { formatOptions } from "@/lib/variants";
 
 export interface CartItemProps {
   item: CartLine;
-  onRemove: (criteria: Pick<CartLine, "productId" | "size" | "color">) => void;
-  onQuantityChange: (criteria: Pick<CartLine, "productId" | "size" | "color">, quantity: number) => void;
+  onRemove: (criteria: Pick<CartLine, "lineKey">) => void;
+  onQuantityChange: (criteria: Pick<CartLine, "lineKey">, quantity: number) => void;
 }
 
 export function CartItem({ item, onRemove, onQuantityChange }: CartItemProps) {
-  const criteria = { productId: item.productId, size: item.size, color: item.color };
+  const criteria = { lineKey: item.lineKey };
 
   return (
     <div className="flex gap-4 py-4">
@@ -31,7 +32,7 @@ export function CartItem({ item, onRemove, onQuantityChange }: CartItemProps) {
           <div className="space-y-1">
             <h3 className="line-clamp-2 text-sm font-medium leading-none">{item.name}</h3>
             <p className="text-xs text-muted-foreground">
-              {item.size} / {item.color}
+              {formatOptions(item.options)}
             </p>
           </div>
           <p className="font-semibold text-sm">৳{item.price * item.quantity}</p>

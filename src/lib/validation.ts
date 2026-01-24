@@ -2,12 +2,28 @@ import { z } from "zod";
 
 export const bangladeshPhoneRegex = /^\+880\d{9}$/;
 
-export const orderItemSchema = z.object({
+const normalizedOrderItemSchema = z.object({
   productId: z.string().min(1),
   quantity: z.number().int().min(1),
-  size: z.string().min(1),
-  color: z.string().min(1)
+  options: z.record(z.string(), z.string()).default({}),
+  variantId: z.string().optional()
 });
+
+const legacyOrderItemSchema = z
+  .object({
+    productId: z.string().min(1),
+    quantity: z.number().int().min(1),
+    size: z.string().min(1),
+    color: z.string().min(1)
+  })
+  .transform((v) => ({
+    productId: v.productId,
+    quantity: v.quantity,
+    options: { Size: v.size, Color: v.color },
+    variantId: undefined
+  }));
+
+export const orderItemSchema = z.union([normalizedOrderItemSchema, legacyOrderItemSchema]);
 
 export const orderSchema = z.object({
   customer_name: z.string().min(2, "Name must be at least 2 characters"),
@@ -24,4 +40,3 @@ export const orderSchema = z.object({
 });
 
 export type Order = z.infer<typeof orderSchema>;
-

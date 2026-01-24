@@ -24,10 +24,9 @@ export function ProductCard({ product }: ProductCardProps) {
       productId: product.id,
       name: product.name,
       price: product.price,
-      size: product.sizes[0],
-      color: product.colors[0],
+      options: { "Age Range": product.sizes[0] ?? "", Color: product.colors[0] ?? "" },
       quantity: 1,
-      image: product.image,
+      image: product.image
     });
   };
 

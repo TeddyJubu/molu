@@ -3,6 +3,7 @@ import { orderSchema } from "@/lib/validation";
 import { ConfigError, InvalidJsonError } from "@/lib/api/errors";
 import { failFromError, ok } from "@/lib/api/response";
 import { notifyOrderCreated } from "@/lib/notifications";
+import { canonicalizeOptions, formatOptions, pickFirstTwoOptions } from "@/lib/variants";
 
 function orderId() {
   const rand = Math.random().toString(16).slice(2, 10);
@@ -57,13 +58,18 @@ export async function POST(request: Request) {
 
     for (const item of parsed.data.items) {
       const product_price = priceById.get(item.productId) ?? 0;
+      const baseName = nameById.get(item.productId) ?? "Unknown";
+      const options = canonicalizeOptions((item as any).options);
+      const optionsLabel = formatOptions(options);
+      const { first, second } = pickFirstTwoOptions(options);
+      const product_name = optionsLabel === "Default" ? baseName : `${baseName} (${optionsLabel})`;
       await nocodb.createOrderItem({
         order_id: id,
         product_id: item.productId,
-        product_name: nameById.get(item.productId) ?? "Unknown",
+        product_name,
         product_price,
-        size: item.size,
-        color: item.color,
+        size: first,
+        color: second,
         quantity: item.quantity,
         subtotal: product_price * item.quantity
       });

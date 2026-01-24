@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { InventoryItem, Order, OrderItem, Product, ProductImage, ProductSummary } from "@/types";
+import type { InventoryItem, Order, OrderItem, Product, ProductImage, ProductOption, ProductSummary, ProductVariant, ProductVariation } from "@/types";
 import { ConfigError, NotFoundError, UpstreamError } from "@/lib/api/errors";
 
 const listResponseSchema = z.object({
@@ -19,6 +19,39 @@ function asStringArray(value: unknown) {
     .split(",")
     .map((s) => s.trim())
     .filter((s) => s.length > 0);
+}
+
+function asStringRecord(value: unknown) {
+  if (!value) return {};
+  if (typeof value === "object" && !Array.isArray(value)) {
+    const out: Record<string, string> = {};
+    for (const [k, v] of Object.entries(value as any)) {
+      if (!k) continue;
+      if (v === undefined || v === null) continue;
+      const sv = String(v).trim();
+      if (!sv) continue;
+      out[String(k)] = sv;
+    }
+    return out;
+  }
+  if (typeof value !== "string") return {};
+  const trimmed = value.trim();
+  if (!trimmed) return {};
+  try {
+    const parsed = JSON.parse(trimmed);
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      const out: Record<string, string> = {};
+      for (const [k, v] of Object.entries(parsed as any)) {
+        if (!k) continue;
+        if (v === undefined || v === null) continue;
+        const sv = String(v).trim();
+        if (!sv) continue;
+        out[String(k)] = sv;
+      }
+      return out;
+    }
+  } catch {}
+  return {};
 }
 
 function asBoolean(value: unknown) {
@@ -55,6 +88,29 @@ const inventoryItemSchema = z.object({
   color: z.string(),
   stock_qty: z.number(),
   low_stock_threshold: z.number().nullable().optional()
+});
+
+const productVariationSchema = z.object({
+  id: z.union([z.string(), z.number()]).transform(String),
+  product_id: z.union([z.string(), z.number()]).transform(String),
+  age_range: z.string(),
+  color: z.string(),
+  stock_qty: z.number()
+});
+
+const productOptionSchema = z.object({
+  id: z.union([z.string(), z.number()]).transform(String),
+  product_id: z.union([z.string(), z.number()]).transform(String),
+  name: z.string(),
+  values: z.array(z.string()),
+  position: z.number().nullable().optional()
+});
+
+const productVariantSchema = z.object({
+  id: z.union([z.string(), z.number()]).transform(String),
+  product_id: z.union([z.string(), z.number()]).transform(String),
+  options: z.record(z.string(), z.string()),
+  stock_qty: z.number()
 });
 
 const orderSchema = z.object({
@@ -346,6 +402,42 @@ export class NocoDBClient {
     return inventoryItemSchema.parse(mapped) as InventoryItem;
   }
 
+  private parseProductVariation(row: unknown) {
+    if (this.schemaProfile === "legacy") throw new Error("Product variations not supported in legacy schema");
+    const r = unwrapRow(row);
+    const mapped = {
+      id: (r as any)?.Id ?? (r as any)?.id ?? (row as any)?.id,
+      product_id: (r as any)?.Products_id ?? (r as any)?.product_id,
+      age_range: String((r as any)?.["Age Range"] ?? (r as any)?.age_range ?? ""),
+      color: String((r as any)?.["Color"] ?? (r as any)?.color ?? ""),
+      stock_qty: Number((r as any)?.["Stock Qty"] ?? (r as any)?.stock_qty ?? 0)
+    };
+    return productVariationSchema.parse(mapped) as ProductVariation;
+  }
+
+  private parseProductOption(row: unknown) {
+    const r = unwrapRow(row);
+    const mapped = {
+      id: (r as any)?.Id ?? (r as any)?.id ?? (row as any)?.id,
+      product_id: (r as any)?.Products_id ?? (r as any)?.product_id,
+      name: String((r as any)?.["Name"] ?? (r as any)?.name ?? ""),
+      values: asStringArray((r as any)?.["Values"] ?? (r as any)?.values_json ?? (r as any)?.values ?? []),
+      position: (r as any)?.["Position"] ?? (r as any)?.position ?? null
+    };
+    return productOptionSchema.parse(mapped) as ProductOption;
+  }
+
+  private parseProductVariant(row: unknown) {
+    const r = unwrapRow(row);
+    const mapped = {
+      id: (r as any)?.Id ?? (r as any)?.id ?? (row as any)?.id,
+      product_id: (r as any)?.Products_id ?? (r as any)?.product_id,
+      options: asStringRecord((r as any)?.["Options"] ?? (r as any)?.options_json ?? (r as any)?.options ?? {}),
+      stock_qty: Number((r as any)?.["Stock Qty"] ?? (r as any)?.stock_qty ?? 0)
+    };
+    return productVariantSchema.parse(mapped) as ProductVariant;
+  }
+
   private parseOrder(row: unknown) {
     if (this.schemaProfile === "legacy") return orderSchema.parse(row) as Order;
     const r = unwrapRow(row);
@@ -552,12 +644,205 @@ export class NocoDBClient {
   }
 
   async listInventory(productId: string) {
+    if (this.schemaProfile === "ecom") {
+      const variants = await this.listProductVariants(productId);
+      if (variants.length) {
+        return variants.map((v) => {
+          const keys = Object.keys(v.options ?? {}).sort((a, b) => a.localeCompare(b));
+          const size = keys[0] ? v.options[keys[0]!] : "Default";
+          const color = keys[1] ? v.options[keys[1]!] : "Default";
+          return inventoryItemSchema.parse({
+            id: v.id,
+            product_id: v.product_id,
+            size: size ?? "Default",
+            color: color ?? "Default",
+            stock_qty: v.stock_qty,
+            low_stock_threshold: null
+          });
+        });
+      }
+
+      const legacy = await this.listProductVariations(productId);
+      if (legacy.length) {
+        return legacy.map((v) =>
+          inventoryItemSchema.parse({
+            id: v.id,
+            product_id: v.product_id,
+            size: v.age_range,
+            color: v.color,
+            stock_qty: v.stock_qty,
+            low_stock_threshold: null
+          })
+        );
+      }
+    }
+
     const where = this.schemaProfile === "ecom" ? this.whereEq("Products_id", Number(productId)) : `(product_id,eq,${productId})`;
     const raw = await this.dataRequestJson<unknown>("product_inventory", "", undefined, {
       where
     });
     const parsed = listResponseSchema.parse(raw);
     return parsed.list.map((row) => this.parseInventoryItem(row));
+  }
+
+  async listProductVariations(productId: string) {
+    if (this.schemaProfile !== "ecom") return [];
+    try {
+      const raw = await this.dataRequestJson<unknown>("product_variations", "", undefined, {
+        where: this.whereEq("Products_id", Number(productId)),
+        limit: 200,
+        offset: 0
+      });
+      const parsed = listResponseSchema.parse(raw);
+      return parsed.list.map((row) => this.parseProductVariation(row));
+    } catch (error) {
+      if (error instanceof ConfigError || error instanceof NotFoundError) return [];
+      throw error;
+    }
+  }
+
+  async createProductVariation(input: Omit<ProductVariation, "id">) {
+    if (this.schemaProfile !== "ecom") throw new ConfigError("Product variations are only supported in ecom schema profile");
+    const body = {
+      Products_id: Number(input.product_id),
+      "Age Range": input.age_range,
+      Color: input.color,
+      "Stock Qty": input.stock_qty
+    };
+    const raw = await this.dataRequestJson<unknown>("product_variations", "", {
+      method: "POST",
+      body: JSON.stringify(body)
+    });
+    return this.parseProductVariation(raw);
+  }
+
+  async updateProductVariation(id: string, patch: Partial<Pick<ProductVariation, "age_range" | "color" | "stock_qty">>) {
+    if (this.schemaProfile !== "ecom") throw new ConfigError("Product variations are only supported in ecom schema profile");
+    const body: Record<string, unknown> = {};
+    if (patch.age_range !== undefined) body["Age Range"] = patch.age_range;
+    if (patch.color !== undefined) body["Color"] = patch.color;
+    if (patch.stock_qty !== undefined) body["Stock Qty"] = patch.stock_qty;
+    const raw = await this.dataRequestJson<unknown>("product_variations", `/${encodeURIComponent(id)}`, {
+      method: "PATCH",
+      body: JSON.stringify(body)
+    });
+    return this.parseProductVariation(raw);
+  }
+
+  async deleteProductVariation(id: string) {
+    if (this.schemaProfile !== "ecom") throw new ConfigError("Product variations are only supported in ecom schema profile");
+    await this.dataRequestJson<unknown>("product_variations", `/${encodeURIComponent(id)}`, {
+      method: "DELETE"
+    });
+  }
+
+  async listProductOptions(productId: string) {
+    try {
+      const raw = await this.dataRequestJson<unknown>("product_options", "", undefined, {
+        where: this.whereEq("Products_id", Number(productId)),
+        limit: 200,
+        offset: 0
+      });
+      const parsed = listResponseSchema.parse(raw);
+      return parsed.list.map((row) => this.parseProductOption(row)).sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
+    } catch (error) {
+      if (error instanceof ConfigError || error instanceof NotFoundError) return [];
+      throw error;
+    }
+  }
+
+  async replaceProductOptions(
+    productId: string,
+    options: Array<{ name: string; values: string[]; position?: number | null }>
+  ) {
+    const existing = await this.listProductOptions(productId);
+    for (const row of existing) {
+      await this.dataRequestJson<unknown>("product_options", `/${encodeURIComponent(row.id)}`, { method: "DELETE" });
+    }
+
+    const created: ProductOption[] = [];
+    for (const option of options) {
+      const body = {
+        Products_id: Number(productId),
+        Name: option.name,
+        Values: JSON.stringify(option.values ?? []),
+        ...(option.position !== undefined ? { Position: option.position } : {})
+      };
+      const raw = await this.dataRequestJson<unknown>("product_options", "", {
+        method: "POST",
+        body: JSON.stringify(body)
+      });
+      created.push(this.parseProductOption(raw));
+    }
+    return created.sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
+  }
+
+  async listProductVariants(productId: string) {
+    try {
+      const raw = await this.dataRequestJson<unknown>("product_variants", "", undefined, {
+        where: this.whereEq("Products_id", Number(productId)),
+        limit: 500,
+        offset: 0
+      });
+      const parsed = listResponseSchema.parse(raw);
+      return parsed.list.map((row) => this.parseProductVariant(row));
+    } catch (error) {
+      if (error instanceof ConfigError || error instanceof NotFoundError) return [];
+      throw error;
+    }
+  }
+
+  async getProductVariantConfiguration(productId: string) {
+    const options = await this.listProductOptions(productId);
+    const variants = await this.listProductVariants(productId);
+    if (options.length || variants.length) {
+      return { options, variants, source: "product_variants" as const };
+    }
+
+    if (this.schemaProfile === "ecom") {
+      const legacy = await this.listProductVariations(productId);
+      if (legacy.length) {
+        const ageRanges = Array.from(new Set(legacy.map((v) => v.age_range).filter(Boolean)));
+        const colors = Array.from(new Set(legacy.map((v) => v.color).filter(Boolean)));
+        return {
+          options: [
+            { id: "legacy-age-range", product_id: productId, name: "Age Range", values: ageRanges, position: 0 },
+            { id: "legacy-color", product_id: productId, name: "Color", values: colors, position: 1 }
+          ],
+          variants: legacy.map((v) => ({
+            id: v.id,
+            product_id: v.product_id,
+            options: { "Age Range": v.age_range, Color: v.color },
+            stock_qty: v.stock_qty
+          })),
+          source: "product_variations" as const
+        };
+      }
+    }
+
+    return { options: [], variants: [], source: "none" as const };
+  }
+
+  async replaceProductVariants(productId: string, variants: Array<{ options: Record<string, string>; stock_qty: number }>) {
+    const existing = await this.listProductVariants(productId);
+    for (const row of existing) {
+      await this.dataRequestJson<unknown>("product_variants", `/${encodeURIComponent(row.id)}`, { method: "DELETE" });
+    }
+
+    const created: ProductVariant[] = [];
+    for (const variant of variants) {
+      const body = {
+        Products_id: Number(productId),
+        Options: JSON.stringify(variant.options ?? {}),
+        "Stock Qty": variant.stock_qty
+      };
+      const raw = await this.dataRequestJson<unknown>("product_variants", "", {
+        method: "POST",
+        body: JSON.stringify(body)
+      });
+      created.push(this.parseProductVariant(raw));
+    }
+    return created;
   }
 
   async createOrder(order: Partial<Order> & { id: string }) {
@@ -599,6 +884,7 @@ export class NocoDBClient {
       const mapped: Record<string, unknown> = {
         "Order ID": item.order_id,
         "Product SKU": item.product_id,
+        "Product Name": item.product_name,
         Quantity: item.quantity,
         Price: item.product_price,
         ...(Number.isFinite(orderIdNum) ? { Orders_id: orderIdNum } : {})

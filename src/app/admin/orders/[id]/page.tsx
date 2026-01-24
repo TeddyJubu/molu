@@ -140,7 +140,7 @@ export default async function AdminOrderDetailPage({ params }: { params: Promise
                     </div>
                   </TableCell>
                   <TableCell className="text-sm text-muted-foreground">
-                    {i.size} · {i.color}
+                    {i.size !== "Default" || i.color !== "Default" ? `${i.size} · ${i.color}` : "—"}
                   </TableCell>
                   <TableCell>{i.quantity}</TableCell>
                   <TableCell className="text-right">৳{i.subtotal}</TableCell>

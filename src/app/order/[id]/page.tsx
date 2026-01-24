@@ -40,9 +40,7 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
               <div key={item.id} className="flex items-start justify-between gap-4 text-sm">
                 <div className="min-w-0">
                   <p className="truncate font-medium">{item.product_name}</p>
-                  <p className="text-gray-600">
-                    {item.size} · {item.color} · x{item.quantity}
-                  </p>
+                  <p className="text-gray-600">{item.size !== "Default" || item.color !== "Default" ? `${item.size} · ${item.color} · ` : ""}x{item.quantity}</p>
                 </div>
                 <p className="shrink-0 font-semibold">৳{item.subtotal}</p>
               </div>

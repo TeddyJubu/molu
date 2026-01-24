@@ -1,5 +1,6 @@
 import { NocoDBClient, isNocoConfigured } from "@/lib/nocodb";
 import { ConfigError, NotFoundError, UpstreamError } from "@/lib/api/errors";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 function okJson(data: unknown) {
   return {
@@ -403,7 +404,7 @@ describe("NocoDBClient (Ecom schema profile)", () => {
     expect(body1).toHaveProperty("Status");
 
     const body2 = JSON.parse(String(fetchMock.mock.calls[2]?.[1]?.body ?? "{}"));
-    expect(body2).toMatchObject({ "Order ID": "10", "Product SKU": "SKU-1", Quantity: 1, Price: 500, Orders_id: 10 });
+    expect(body2).toMatchObject({ "Order ID": "10", "Product SKU": "SKU-1", "Product Name": "X", Quantity: 1, Price: 500, Orders_id: 10 });
   });
 
   it("preserves existing order metadata when updating status", async () => {
@@ -434,5 +435,125 @@ describe("NocoDBClient (Ecom schema profile)", () => {
     expect(updated.customer_phone).toBe("+8801");
     expect(updated.order_status).toBe("confirmed");
     expect(fetchMock.mock.calls[2]?.[1]).toEqual(expect.objectContaining({ method: "PATCH" }));
+  });
+
+  it("maps product_variants to inventory when available", async () => {
+    vi.stubGlobal("fetch", vi.fn());
+    const fetchMock = vi.mocked(fetch);
+
+    fetchMock
+      .mockResolvedValueOnce(
+        okJson({
+          list: [
+            { id: "mc0ezyw89h4gpbb", title: "Products", table_name: "Products" },
+            { id: "mprodvars", title: "Product Variants", table_name: "product_variants" }
+          ]
+        })
+      )
+      .mockResolvedValueOnce(
+        okJson({
+          list: [{ Id: 1, Products_id: 2, Options: '{"Age Range":"2Y-3Y","Color":"Blue"}', "Stock Qty": 7 }]
+        })
+      );
+
+    const client = new NocoDBClient();
+    const inventory = await client.listInventory("2");
+    expect(inventory).toEqual([{ id: "1", product_id: "2", size: "2Y-3Y", color: "Blue", stock_qty: 7, low_stock_threshold: null }]);
+    expect(String(fetchMock.mock.calls[1]?.[0] ?? "")).toContain("mprodvars");
+  });
+
+  it("maps product_variations to inventory when available", async () => {
+    vi.stubGlobal("fetch", vi.fn());
+    const fetchMock = vi.mocked(fetch);
+
+    fetchMock
+      .mockResolvedValueOnce(
+        okJson({
+          list: [
+            { id: "mc0ezyw89h4gpbb", title: "Products", table_name: "Products" },
+            { id: "mprodvar", title: "Product Variations", table_name: "product_variations" }
+          ]
+        })
+      )
+      .mockResolvedValueOnce(
+        okJson({
+          list: [{ Id: 1, Products_id: 2, "Age Range": "2Y-3Y", Color: "Blue", "Stock Qty": 7 }]
+        })
+      );
+
+    const client = new NocoDBClient();
+    const inventory = await client.listInventory("2");
+    expect(inventory).toEqual([{ id: "1", product_id: "2", size: "2Y-3Y", color: "Blue", stock_qty: 7, low_stock_threshold: null }]);
+    expect(String(fetchMock.mock.calls[1]?.[0] ?? "")).toContain("mprodvar");
+  });
+
+  it("falls back to legacy product_variations for variant configuration", async () => {
+    vi.stubGlobal("fetch", vi.fn());
+    const fetchMock = vi.mocked(fetch);
+
+    fetchMock
+      .mockResolvedValueOnce(
+        okJson({
+          list: [
+            { id: "mc0ezyw89h4gpbb", title: "Products", table_name: "Products" },
+            { id: "mprodvar", title: "Product Variations", table_name: "product_variations" }
+          ]
+        })
+      )
+      .mockResolvedValueOnce(
+        okJson({
+          list: [{ Id: 1, Products_id: 2, "Age Range": "2Y-3Y", Color: "Blue", "Stock Qty": 7 }]
+        })
+      );
+
+    const client = new NocoDBClient();
+    const config = await client.getProductVariantConfiguration("2");
+    expect(config.source).toBe("product_variations");
+    expect(config.options.map((o) => o.name)).toEqual(["Age Range", "Color"]);
+    expect(config.variants[0]).toMatchObject({ stock_qty: 7, options: { "Age Range": "2Y-3Y", Color: "Blue" } });
+    expect(String(fetchMock.mock.calls[1]?.[0] ?? "")).toContain("mprodvar");
+  });
+
+  it("lists, creates, updates, and deletes product variations", async () => {
+    vi.stubGlobal("fetch", vi.fn());
+    const fetchMock = vi.mocked(fetch);
+
+    fetchMock
+      .mockResolvedValueOnce(
+        okJson({
+          list: [{ id: "mprodvar", title: "Product Variations", table_name: "product_variations" }]
+        })
+      )
+      .mockResolvedValueOnce(
+        okJson({
+          list: [{ Id: 1, Products_id: 2, "Age Range": "2Y-3Y", Color: "Blue", "Stock Qty": 7 }]
+        })
+      )
+      .mockImplementationOnce(async (_url, init) => {
+        const body = JSON.parse(String(init?.body ?? "{}"));
+        return okJson({ Id: 2, Products_id: body.Products_id, "Age Range": body["Age Range"], Color: body.Color, "Stock Qty": body["Stock Qty"] });
+      })
+      .mockImplementationOnce(async (_url, init) => {
+        const body = JSON.parse(String(init?.body ?? "{}"));
+        return okJson({ Id: 2, Products_id: 2, "Age Range": body["Age Range"], Color: body["Color"], "Stock Qty": body["Stock Qty"] });
+      })
+      .mockResolvedValueOnce(okJson({}));
+
+    const client = new NocoDBClient();
+
+    const existing = await client.listProductVariations("2");
+    expect(existing).toEqual([{ id: "1", product_id: "2", age_range: "2Y-3Y", color: "Blue", stock_qty: 7 }]);
+
+    const created = await client.createProductVariation({ product_id: "2", age_range: "3Y-4Y", color: "Blue", stock_qty: 1 });
+    expect(created).toMatchObject({ id: "2", product_id: "2", age_range: "3Y-4Y", color: "Blue", stock_qty: 1 });
+
+    const updated = await client.updateProductVariation("2", { stock_qty: 9 });
+    expect(updated.stock_qty).toBe(9);
+
+    await client.deleteProductVariation("2");
+
+    expect(fetchMock.mock.calls[2]?.[1]).toEqual(expect.objectContaining({ method: "POST" }));
+    expect(fetchMock.mock.calls[3]?.[1]).toEqual(expect.objectContaining({ method: "PATCH" }));
+    expect(fetchMock.mock.calls[4]?.[1]).toEqual(expect.objectContaining({ method: "DELETE" }));
   });
 });

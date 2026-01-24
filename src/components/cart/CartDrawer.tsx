@@ -43,7 +43,7 @@ export function CartDrawer({ open, onClose }: CartDrawerProps) {
               <div>
                 {items.map((item) => (
                   <CartItem
-                    key={`${item.productId}:${item.size}:${item.color}`}
+                    key={item.lineKey}
                     item={item}
                     onRemove={removeItem}
                     onQuantityChange={updateQuantity}
@@ -58,4 +58,3 @@ export function CartDrawer({ open, onClose }: CartDrawerProps) {
     </div>
   );
 }
-

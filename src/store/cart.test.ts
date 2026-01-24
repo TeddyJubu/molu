@@ -11,8 +11,7 @@ describe("cart store", () => {
         productId: "1",
         name: "Onesie",
         price: 500,
-        size: "6M",
-        color: "White",
+        options: { "Age Range": "6M", Color: "White" },
         quantity: 1,
         image: "/onesie.jpg"
       });
@@ -29,8 +28,7 @@ describe("cart store", () => {
         productId: "1",
         name: "Onesie",
         price: 500,
-        size: "6M",
-        color: "White",
+        options: { "Age Range": "6M", Color: "White" },
         quantity: 1,
         image: "/onesie.jpg"
       });
@@ -38,8 +36,7 @@ describe("cart store", () => {
         productId: "1",
         name: "Onesie",
         price: 500,
-        size: "6M",
-        color: "White",
+        options: { "Age Range": "6M", Color: "White" },
         quantity: 2,
         image: "/onesie.jpg"
       });
@@ -57,8 +54,7 @@ describe("cart store", () => {
         productId: "1",
         name: "Onesie",
         price: 500,
-        size: "6M",
-        color: "White",
+        options: { "Age Range": "6M", Color: "White" },
         quantity: 2,
         image: "/onesie.jpg"
       });
@@ -66,8 +62,7 @@ describe("cart store", () => {
         productId: "2",
         name: "T-Shirt",
         price: 300,
-        size: "2Y",
-        color: "Blue",
+        options: { "Age Range": "2Y", Color: "Blue" },
         quantity: 1,
         image: "/shirt.jpg"
       });
@@ -84,8 +79,7 @@ describe("cart store", () => {
         productId: "1",
         name: "Onesie",
         price: 500,
-        size: "6M",
-        color: "White",
+        options: { "Age Range": "6M", Color: "White" },
         quantity: 1,
         image: "/onesie.jpg"
       });
@@ -93,16 +87,19 @@ describe("cart store", () => {
         productId: "1",
         name: "Onesie",
         price: 500,
-        size: "12M",
-        color: "White",
+        options: { "Age Range": "12M", Color: "White" },
         quantity: 1,
         image: "/onesie.jpg"
       });
-      store.removeItem({ productId: "1", size: "6M", color: "White" });
+    });
+
+    const first = useCart.getState().items.find((i) => i.productId === "1" && i.options["Age Range"] === "6M");
+    act(() => {
+      if (first) store.removeItem({ lineKey: first.lineKey });
     });
 
     expect(useCart.getState().items).toHaveLength(1);
-    expect(useCart.getState().items[0]?.size).toBe("12M");
+    expect(useCart.getState().items[0]?.options["Age Range"]).toBe("12M");
   });
 
   it("updates quantity and clamps at 1", () => {
@@ -113,8 +110,7 @@ describe("cart store", () => {
         productId: "1",
         name: "Onesie",
         price: 500,
-        size: "6M",
-        color: "White",
+        options: { "Age Range": "6M", Color: "White" },
         quantity: 2,
         image: "/onesie.jpg"
       });
@@ -122,15 +118,17 @@ describe("cart store", () => {
         productId: "2",
         name: "T-Shirt",
         price: 300,
-        size: "2Y",
-        color: "Blue",
+        options: { "Age Range": "2Y", Color: "Blue" },
         quantity: 1,
         image: "/shirt.jpg"
       });
-      store.updateQuantity({ productId: "1", size: "6M", color: "White" }, 0);
-      store.updateQuantity({ productId: "nope", size: "X", color: "Y" }, 99);
     });
 
+    const first = useCart.getState().items.find((i) => i.productId === "1");
+    act(() => {
+      if (first) store.updateQuantity({ lineKey: first.lineKey }, 0);
+      store.updateQuantity({ lineKey: "nope" }, 99);
+    });
     const items = useCart.getState().items;
     expect(items).toHaveLength(2);
     expect(items.find((i) => i.productId === "1")?.quantity).toBe(1);

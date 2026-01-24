@@ -36,7 +36,7 @@ export default function CartPage() {
               <div className="p-6 space-y-6">
                 {items.map((item) => (
                   <CartItem
-                    key={`${item.productId}:${item.size}:${item.color}`}
+                    key={item.lineKey}
                     item={item}
                     onRemove={removeItem}
                     onQuantityChange={updateQuantity}
