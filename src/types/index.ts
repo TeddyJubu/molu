@@ -43,6 +43,7 @@ export interface ProductVariant {
   product_id: string;
   options: VariantOptions;
   stock_qty: number;
+  price?: number | null;
 }
 
 export interface ProductVariation {

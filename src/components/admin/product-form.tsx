@@ -13,6 +13,7 @@ import { Badge } from "@/components/ui/badge";
 import { X, Plus } from "lucide-react";
 import { createProductAction, getProductVariantConfigurationAction, updateProductDetailsAction } from "@/app/admin/_actions";
 import { toast } from "sonner";
+import { useRouter } from "next/navigation";
 
 const formSchema = z.object({
   id: z.string().optional(),
@@ -39,6 +40,7 @@ type OptionDraft = {
 type VariantDraft = {
   stock_qty: number;
   options: Record<string, string>;
+  price: number | null;
 };
 
 export function ProductForm({
@@ -48,6 +50,7 @@ export function ProductForm({
   defaultValues?: ProductFormValues;
   onSuccess?: () => void;
 }) {
+  const router = useRouter();
   const form = useForm<ProductFormValues>({
     resolver: zodResolver(formSchema),
     defaultValues: defaultValues || {
@@ -62,8 +65,9 @@ export function ProductForm({
 
   const [options, setOptions] = useState<OptionDraft[]>([]);
   const [newValueByOption, setNewValueByOption] = useState<Record<number, string>>({});
-  const [variants, setVariants] = useState<VariantDraft[]>([{ options: {}, stock_qty: 0 }]);
+  const [variants, setVariants] = useState<VariantDraft[]>([{ options: {}, stock_qty: 0, price: null }]);
   const [isLoadingConfig, setIsLoadingConfig] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -82,13 +86,13 @@ export function ProductForm({
         );
         setVariants(
           (config.variants ?? []).length
-            ? (config.variants ?? []).map((v) => ({ stock_qty: v.stock_qty, options: v.options ?? {} }))
-            : [{ options: {}, stock_qty: 0 }]
+            ? (config.variants ?? []).map((v) => ({ stock_qty: v.stock_qty, options: v.options ?? {}, price: v.price ?? null }))
+            : [{ options: {}, stock_qty: 0, price: null }]
         );
       } catch (e) {
         if (!cancelled) {
           setOptions([]);
-          setVariants([{ options: {}, stock_qty: 0 }]);
+          setVariants([{ options: {}, stock_qty: 0, price: null }]);
         }
       } finally {
         if (!cancelled) setIsLoadingConfig(false);
@@ -179,12 +183,12 @@ export function ProductForm({
 
   const addVariantRow = () => {
     if (!normalizedOptions.length) {
-      setVariants((prev) => [...prev, { options: {}, stock_qty: 0 }]);
+      setVariants((prev) => [...prev, { options: {}, stock_qty: 0, price: null }]);
       return;
     }
     const options: Record<string, string> = {};
     for (const opt of normalizedOptions) options[opt.name] = "";
-    setVariants((prev) => [...prev, { options, stock_qty: 0 }]);
+    setVariants((prev) => [...prev, { options, stock_qty: 0, price: null }]);
   };
 
   const removeVariantRow = (index: number) => {
@@ -210,7 +214,7 @@ export function ProductForm({
     const build = (idx: number, acc: Record<string, string>) => {
       if (idx >= normalizedOptions.length) {
         const key = order.map((k) => `${k}:${acc[k] ?? ""}`).join("||");
-        if (!existing.has(key)) next.push({ options: { ...acc }, stock_qty: 0 });
+        if (!existing.has(key)) next.push({ options: { ...acc }, stock_qty: 0, price: null });
         return;
       }
       const opt = normalizedOptions[idx]!;
@@ -227,6 +231,8 @@ export function ProductForm({
   };
 
   async function onSubmit(data: ProductFormValues) {
+    if (isSaving) return;
+    setIsSaving(true);
     const formData = new FormData();
     if (data.id) formData.append("id", data.id);
     formData.append("name", data.name);
@@ -245,7 +251,8 @@ export function ProductForm({
       options: Object.fromEntries(
         optionNames.map((name) => [name, String((v.options ?? {})[name] ?? "").trim().replace(/\s+/g, " ")])
       ),
-      stock_qty: Number(v.stock_qty ?? 0)
+      stock_qty: Number(v.stock_qty ?? 0),
+      price: v.price === null ? null : Number(v.price)
     }));
 
     if (optionsPayload.length) {
@@ -264,14 +271,22 @@ export function ProductForm({
           toast.error("Stock must be a non-negative number");
           return;
         }
+        if (variant.price !== null && (!Number.isFinite(variant.price) || variant.price < 0)) {
+          toast.error("Price must be a non-negative number");
+          return;
+        }
       }
     } else {
-      const only = variantsPayload[0] ?? { options: {}, stock_qty: 0 };
+      const only = variantsPayload[0] ?? { options: {}, stock_qty: 0, price: null };
       if (!Number.isFinite(only.stock_qty) || only.stock_qty < 0) {
         toast.error("Stock must be a non-negative number");
         return;
       }
-      variantsPayload.splice(0, variantsPayload.length, { options: {}, stock_qty: only.stock_qty });
+      if (only.price !== null && (!Number.isFinite(only.price) || only.price < 0)) {
+        toast.error("Price must be a non-negative number");
+        return;
+      }
+      variantsPayload.splice(0, variantsPayload.length, { options: {}, stock_qty: only.stock_qty, price: only.price });
     }
 
     formData.append("options", JSON.stringify(optionsPayload));
@@ -285,16 +300,26 @@ export function ProductForm({
         await createProductAction(formData);
         toast.success("Product created");
       }
+      router.refresh();
       onSuccess?.();
     } catch (error) {
       const message = error instanceof Error ? error.message : "Failed to save product";
       toast.error(message);
+    } finally {
+      setIsSaving(false);
     }
   }
 
   return (
     <Form {...form}>
-      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          void form.handleSubmit(onSubmit)(e);
+        }}
+        className="space-y-4"
+      >
         <FormField
           control={form.control}
           name="name"
@@ -448,14 +473,28 @@ export function ProductForm({
 
           {!normalizedOptions.length ? (
             <div className="rounded border p-3">
-              <div className="w-full sm:w-48">
-                <Label>Stock Qty</Label>
-                <Input
-                  type="number"
-                  value={String(variants[0]?.stock_qty ?? 0)}
-                  onChange={(e) => setVariants([{ options: {}, stock_qty: Number(e.target.value) }])}
-                  min={0}
-                />
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+                <div className="w-full sm:w-48">
+                  <Label>Stock Qty</Label>
+                  <Input
+                    type="number"
+                    value={String(variants[0]?.stock_qty ?? 0)}
+                    onChange={(e) => setVariants([{ options: {}, stock_qty: Number(e.target.value), price: variants[0]?.price ?? null }])}
+                    min={0}
+                  />
+                </div>
+                <div className="w-full sm:w-48">
+                  <Label>Price (Optional)</Label>
+                  <Input
+                    type="number"
+                    value={variants[0]?.price === null ? "" : String(variants[0]?.price)}
+                    onChange={(e) =>
+                      setVariants([{ options: {}, stock_qty: variants[0]?.stock_qty ?? 0, price: e.target.value ? Number(e.target.value) : null }])
+                    }
+                    min={0}
+                    placeholder="Use product price"
+                  />
+                </div>
               </div>
             </div>
           ) : (
@@ -480,6 +519,20 @@ export function ProductForm({
                     </div>
                   ))}
                   <div className="w-full sm:w-32">
+                    <Label>Price</Label>
+                    <Input
+                      type="number"
+                      value={v.price === null ? "" : String(v.price)}
+                      onChange={(e) =>
+                        setVariants((prev) =>
+                          prev.map((row, i) => (i === idx ? { ...row, price: e.target.value ? Number(e.target.value) : null } : row))
+                        )
+                      }
+                      min={0}
+                      placeholder="Use product price"
+                    />
+                  </div>
+                  <div className="w-full sm:w-32">
                     <Label>Stock</Label>
                     <Input
                       type="number"
@@ -502,7 +555,9 @@ export function ProductForm({
         </div>
 
         <div className="flex justify-end gap-2 pt-2">
-          <Button type="submit">{defaultValues?.id ? "Update Product" : "Create Product"}</Button>
+          <Button type="submit" disabled={isSaving || form.formState.isSubmitting}>
+            {defaultValues?.id ? "Update Product" : "Create Product"}
+          </Button>
         </div>
       </form>
     </Form>

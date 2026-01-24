@@ -63,6 +63,22 @@ async function ensureTable({ baseUrl, token, projectId, sourceId, title, table_n
   return { exists: false, table_id: created?.id ?? "" };
 }
 
+async function ensureColumn({ baseUrl, token, tableId, column }) {
+  const meta = await request(baseUrl, token, `/api/v1/db/meta/tables/${encodeURIComponent(tableId)}`);
+  const columns = meta?.columns ?? [];
+  const exists =
+    columns.some((c) => String(c?.title ?? "").toLowerCase() === String(column.title).toLowerCase()) ||
+    columns.some((c) => String(c?.column_name ?? "").toLowerCase() === String(column.column_name).toLowerCase());
+  if (exists) return { exists: true };
+
+  await request(baseUrl, token, `/api/v1/db/meta/tables/${encodeURIComponent(tableId)}/columns`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(column)
+  });
+  return { exists: false };
+}
+
 async function main() {
   const env = readEnvFile(".env.local");
   const baseUrl = String(env.NOCODB_API_URL || "http://localhost:8080").replace(/\/+$/, "");
@@ -103,14 +119,26 @@ async function main() {
       { title: "Id", column_name: "Id", uidt: "ID" },
       { title: "Products_id", column_name: "Products_id", uidt: "Number" },
       { title: "Options", column_name: "options_json", uidt: "LongText" },
-      { title: "Stock Qty", column_name: "stock_qty", uidt: "Number" }
+      { title: "Stock Qty", column_name: "stock_qty", uidt: "Number" },
+      { title: "Price", column_name: "price", uidt: "Number" }
     ]
   });
+
+  let productVariantsPriceColumn = { exists: true };
+  if (productVariants.table_id) {
+    productVariantsPriceColumn = await ensureColumn({
+      baseUrl,
+      token,
+      tableId: productVariants.table_id,
+      column: { title: "Price", column_name: "price", uidt: "Number" }
+    });
+  }
 
   process.stdout.write(`product_options.exists=${productOptions.exists}\n`);
   process.stdout.write(`product_options.table_id=${productOptions.table_id}\n`);
   process.stdout.write(`product_variants.exists=${productVariants.exists}\n`);
   process.stdout.write(`product_variants.table_id=${productVariants.table_id}\n`);
+  process.stdout.write(`product_variants.price_column.exists=${productVariantsPriceColumn.exists}\n`);
 }
 
 main().catch((err) => {

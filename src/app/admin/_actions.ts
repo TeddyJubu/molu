@@ -18,7 +18,8 @@ const productOptionsInputSchema = z.array(
 const productVariantsInputSchema = z.array(
   z.object({
     options: z.record(z.string(), z.string()),
-    stock_qty: z.number()
+    stock_qty: z.number(),
+    price: z.number().nullable().optional()
   })
 );
 
@@ -116,7 +117,7 @@ export async function createProductAction(formData: FormData) {
   }
 
   const variantsParsed = productVariantsInputSchema.parse(variantsInput);
-  const normalizedVariants = (variantsParsed.length ? variantsParsed : [{ options: {}, stock_qty: 0 }]).map((v) => {
+  const normalizedVariants = (variantsParsed.length ? variantsParsed : [{ options: {}, stock_qty: 0, price: null }]).map((v) => {
     const options: Record<string, string> = {};
     for (const [k, val] of Object.entries(v.options ?? {})) {
       const name = normalizeOptionName(k);
@@ -126,7 +127,9 @@ export async function createProductAction(formData: FormData) {
     }
     const stock_qty = Number(v.stock_qty ?? 0);
     if (!Number.isFinite(stock_qty) || stock_qty < 0) throw new ConfigError("Invalid stock_qty");
-    return { options, stock_qty };
+    const price = v.price === null || v.price === undefined ? null : Number(v.price);
+    if (price !== null && (!Number.isFinite(price) || price < 0)) throw new ConfigError("Invalid price");
+    return { options, stock_qty, price };
   });
 
   if (normalizedOptions.length) {
@@ -209,7 +212,7 @@ export async function updateProductDetailsAction(formData: FormData) {
   }
 
   const variantsParsed = productVariantsInputSchema.parse(variantsInput);
-  const normalizedVariants = (variantsParsed.length ? variantsParsed : [{ options: {}, stock_qty: 0 }]).map((v) => {
+  const normalizedVariants = (variantsParsed.length ? variantsParsed : [{ options: {}, stock_qty: 0, price: null }]).map((v) => {
     const options: Record<string, string> = {};
     for (const [k, val] of Object.entries(v.options ?? {})) {
       const name = normalizeOptionName(k);
@@ -219,7 +222,9 @@ export async function updateProductDetailsAction(formData: FormData) {
     }
     const stock_qty = Number(v.stock_qty ?? 0);
     if (!Number.isFinite(stock_qty) || stock_qty < 0) throw new ConfigError("Invalid stock_qty");
-    return { options, stock_qty };
+    const price = v.price === null || v.price === undefined ? null : Number(v.price);
+    if (price !== null && (!Number.isFinite(price) || price < 0)) throw new ConfigError("Invalid price");
+    return { options, stock_qty, price };
   });
 
   if (normalizedOptions.length) {

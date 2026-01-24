@@ -452,13 +452,35 @@ describe("NocoDBClient (Ecom schema profile)", () => {
       )
       .mockResolvedValueOnce(
         okJson({
-          list: [{ Id: 1, Products_id: 2, Options: '{"Age Range":"2Y-3Y","Color":"Blue"}', "Stock Qty": 7 }]
+          list: [{ Id: 1, Products_id: 2, Options: '{"Age Range":"2Y-3Y","Color":"Blue"}', "Stock Qty": 7, Price: 999 }]
         })
       );
 
     const client = new NocoDBClient();
     const inventory = await client.listInventory("2");
     expect(inventory).toEqual([{ id: "1", product_id: "2", size: "2Y-3Y", color: "Blue", stock_qty: 7, low_stock_threshold: null }]);
+    expect(String(fetchMock.mock.calls[1]?.[0] ?? "")).toContain("mprodvars");
+  });
+
+  it("parses variant price from product_variants", async () => {
+    vi.stubGlobal("fetch", vi.fn());
+    const fetchMock = vi.mocked(fetch);
+
+    fetchMock
+      .mockResolvedValueOnce(
+        okJson({
+          list: [{ id: "mprodvars", title: "Product Variants", table_name: "product_variants" }]
+        })
+      )
+      .mockResolvedValueOnce(
+        okJson({
+          list: [{ Id: 1, Products_id: 2, Options: '{"Size":"S"}', "Stock Qty": 7, Price: 250 }]
+        })
+      );
+
+    const client = new NocoDBClient();
+    const variants = await client.listProductVariants("2");
+    expect(variants).toEqual([{ id: "1", product_id: "2", options: { Size: "S" }, stock_qty: 7, price: 250 }]);
     expect(String(fetchMock.mock.calls[1]?.[0] ?? "")).toContain("mprodvars");
   });
 

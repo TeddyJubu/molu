@@ -110,7 +110,8 @@ const productVariantSchema = z.object({
   id: z.union([z.string(), z.number()]).transform(String),
   product_id: z.union([z.string(), z.number()]).transform(String),
   options: z.record(z.string(), z.string()),
-  stock_qty: z.number()
+  stock_qty: z.number(),
+  price: z.number().nullable().optional()
 });
 
 const orderSchema = z.object({
@@ -309,6 +310,76 @@ export class NocoDBClient {
     this.tableIdByTitle = map;
   }
 
+  private async ensureEcomOptionAndVariantTables() {
+    if (this.schemaProfile !== "ecom") return;
+
+    const raw = await this.requestJson<unknown>(`/api/v1/db/meta/projects/${this.projectId}/tables`);
+    const tables = Array.isArray((raw as any)?.list) ? (raw as any).list : [];
+    const sourceId = tables[0]?.source_id;
+    if (!sourceId) return;
+
+    const findTable = (table_name: string, title: string) =>
+      tables.find((t: any) => t?.table_name === table_name) ?? tables.find((t: any) => t?.title === title) ?? null;
+
+    const ensureTable = async (args: { table_name: string; title: string; columns: any[] }) => {
+      const existing = findTable(args.table_name, args.title);
+      if (existing?.id) return String(existing.id);
+      const created = await this.requestJson<unknown>(`/api/v2/meta/bases/${this.projectId}/tables`, {
+        method: "POST",
+        body: JSON.stringify({
+          title: args.title,
+          table_name: args.table_name,
+          type: "table",
+          source_id: sourceId,
+          columns: args.columns
+        })
+      });
+      const id = (created as any)?.id;
+      return id ? String(id) : "";
+    };
+
+    const ensureColumn = async (tableId: string, column: any) => {
+      if (!tableId) return;
+      const tableMeta = await this.requestJson<unknown>(`/api/v1/db/meta/tables/${encodeURIComponent(tableId)}`);
+      const cols = Array.isArray((tableMeta as any)?.columns) ? (tableMeta as any).columns : [];
+      const exists =
+        cols.some((c: any) => String(c?.title ?? "").toLowerCase() === String(column.title ?? "").toLowerCase()) ||
+        cols.some((c: any) => String(c?.column_name ?? "").toLowerCase() === String(column.column_name ?? "").toLowerCase());
+      if (exists) return;
+      await this.requestJson<unknown>(`/api/v1/db/meta/tables/${encodeURIComponent(tableId)}/columns`, {
+        method: "POST",
+        body: JSON.stringify(column)
+      });
+    };
+
+    const productOptionsTableId = await ensureTable({
+      title: "Product Options",
+      table_name: "product_options",
+      columns: [
+        { title: "Id", column_name: "Id", uidt: "ID" },
+        { title: "Products_id", column_name: "Products_id", uidt: "Number" },
+        { title: "Name", column_name: "name", uidt: "SingleLineText" },
+        { title: "Values", column_name: "values_json", uidt: "LongText" },
+        { title: "Position", column_name: "position", uidt: "Number" }
+      ]
+    });
+
+    const productVariantsTableId = await ensureTable({
+      title: "Product Variants",
+      table_name: "product_variants",
+      columns: [
+        { title: "Id", column_name: "Id", uidt: "ID" },
+        { title: "Products_id", column_name: "Products_id", uidt: "Number" },
+        { title: "Options", column_name: "options_json", uidt: "LongText" },
+        { title: "Stock Qty", column_name: "stock_qty", uidt: "Number" },
+        { title: "Price", column_name: "price", uidt: "Number" }
+      ]
+    });
+
+    await ensureColumn(productVariantsTableId, { title: "Price", column_name: "price", uidt: "Number" });
+    if (productOptionsTableId || productVariantsTableId) this.tableIdByTitle = null;
+  }
+
   private async resolveTableSegment(tableTitle: string) {
     if (this.dataApiMode !== "org-table-id") return encodeURIComponent(tableTitle);
     await this.ensureTableIdMap();
@@ -429,11 +500,15 @@ export class NocoDBClient {
 
   private parseProductVariant(row: unknown) {
     const r = unwrapRow(row);
+    const rawPrice = (r as any)?.["Price"] ?? (r as any)?.price ?? null;
+    const parsedPrice =
+      rawPrice === null || rawPrice === undefined || rawPrice === "" ? null : Number(rawPrice);
     const mapped = {
       id: (r as any)?.Id ?? (r as any)?.id ?? (row as any)?.id,
       product_id: (r as any)?.Products_id ?? (r as any)?.product_id,
       options: asStringRecord((r as any)?.["Options"] ?? (r as any)?.options_json ?? (r as any)?.options ?? {}),
-      stock_qty: Number((r as any)?.["Stock Qty"] ?? (r as any)?.stock_qty ?? 0)
+      stock_qty: Number((r as any)?.["Stock Qty"] ?? (r as any)?.stock_qty ?? 0),
+      price: parsedPrice !== null && Number.isFinite(parsedPrice) ? parsedPrice : null
     };
     return productVariantSchema.parse(mapped) as ProductVariant;
   }
@@ -755,26 +830,52 @@ export class NocoDBClient {
     productId: string,
     options: Array<{ name: string; values: string[]; position?: number | null }>
   ) {
-    const existing = await this.listProductOptions(productId);
-    for (const row of existing) {
-      await this.dataRequestJson<unknown>("product_options", `/${encodeURIComponent(row.id)}`, { method: "DELETE" });
-    }
+    try {
+      const existing = await this.listProductOptions(productId);
+      for (const row of existing) {
+        await this.dataRequestJson<unknown>("product_options", `/${encodeURIComponent(row.id)}`, { method: "DELETE" });
+      }
 
-    const created: ProductOption[] = [];
-    for (const option of options) {
-      const body = {
-        Products_id: Number(productId),
-        Name: option.name,
-        Values: JSON.stringify(option.values ?? []),
-        ...(option.position !== undefined ? { Position: option.position } : {})
-      };
-      const raw = await this.dataRequestJson<unknown>("product_options", "", {
-        method: "POST",
-        body: JSON.stringify(body)
-      });
-      created.push(this.parseProductOption(raw));
+      const created: ProductOption[] = [];
+      for (const option of options) {
+        const body = {
+          Products_id: Number(productId),
+          Name: option.name,
+          Values: JSON.stringify(option.values ?? []),
+          ...(option.position !== undefined ? { Position: option.position } : {})
+        };
+        const raw = await this.dataRequestJson<unknown>("product_options", "", {
+          method: "POST",
+          body: JSON.stringify(body)
+        });
+        created.push(this.parseProductOption(raw));
+      }
+      return created.sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
+    } catch (error) {
+      if (error instanceof ConfigError && String(error.message ?? "").includes("product_options")) {
+        await this.ensureEcomOptionAndVariantTables();
+        const retry = await this.listProductOptions(productId);
+        for (const row of retry) {
+          await this.dataRequestJson<unknown>("product_options", `/${encodeURIComponent(row.id)}`, { method: "DELETE" });
+        }
+        const created: ProductOption[] = [];
+        for (const option of options) {
+          const body = {
+            Products_id: Number(productId),
+            Name: option.name,
+            Values: JSON.stringify(option.values ?? []),
+            ...(option.position !== undefined ? { Position: option.position } : {})
+          };
+          const raw = await this.dataRequestJson<unknown>("product_options", "", {
+            method: "POST",
+            body: JSON.stringify(body)
+          });
+          created.push(this.parseProductOption(raw));
+        }
+        return created.sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
+      }
+      throw error;
     }
-    return created.sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
   }
 
   async listProductVariants(productId: string) {
@@ -813,7 +914,8 @@ export class NocoDBClient {
             id: v.id,
             product_id: v.product_id,
             options: { "Age Range": v.age_range, Color: v.color },
-            stock_qty: v.stock_qty
+            stock_qty: v.stock_qty,
+            price: null
           })),
           source: "product_variations" as const
         };
@@ -823,26 +925,56 @@ export class NocoDBClient {
     return { options: [], variants: [], source: "none" as const };
   }
 
-  async replaceProductVariants(productId: string, variants: Array<{ options: Record<string, string>; stock_qty: number }>) {
-    const existing = await this.listProductVariants(productId);
-    for (const row of existing) {
-      await this.dataRequestJson<unknown>("product_variants", `/${encodeURIComponent(row.id)}`, { method: "DELETE" });
-    }
+  async replaceProductVariants(
+    productId: string,
+    variants: Array<{ options: Record<string, string>; stock_qty: number; price?: number | null }>
+  ) {
+    try {
+      const existing = await this.listProductVariants(productId);
+      for (const row of existing) {
+        await this.dataRequestJson<unknown>("product_variants", `/${encodeURIComponent(row.id)}`, { method: "DELETE" });
+      }
 
-    const created: ProductVariant[] = [];
-    for (const variant of variants) {
-      const body = {
-        Products_id: Number(productId),
-        Options: JSON.stringify(variant.options ?? {}),
-        "Stock Qty": variant.stock_qty
-      };
-      const raw = await this.dataRequestJson<unknown>("product_variants", "", {
-        method: "POST",
-        body: JSON.stringify(body)
-      });
-      created.push(this.parseProductVariant(raw));
+      const created: ProductVariant[] = [];
+      for (const variant of variants) {
+        const body = {
+          Products_id: Number(productId),
+          Options: JSON.stringify(variant.options ?? {}),
+          "Stock Qty": variant.stock_qty,
+          ...(variant.price === undefined || variant.price === null ? {} : { Price: variant.price })
+        };
+        const raw = await this.dataRequestJson<unknown>("product_variants", "", {
+          method: "POST",
+          body: JSON.stringify(body)
+        });
+        created.push(this.parseProductVariant(raw));
+      }
+      return created;
+    } catch (error) {
+      if (error instanceof ConfigError && String(error.message ?? "").includes("product_variants")) {
+        await this.ensureEcomOptionAndVariantTables();
+        const existing = await this.listProductVariants(productId);
+        for (const row of existing) {
+          await this.dataRequestJson<unknown>("product_variants", `/${encodeURIComponent(row.id)}`, { method: "DELETE" });
+        }
+        const created: ProductVariant[] = [];
+        for (const variant of variants) {
+          const body = {
+            Products_id: Number(productId),
+            Options: JSON.stringify(variant.options ?? {}),
+            "Stock Qty": variant.stock_qty,
+            ...(variant.price === undefined || variant.price === null ? {} : { Price: variant.price })
+          };
+          const raw = await this.dataRequestJson<unknown>("product_variants", "", {
+            method: "POST",
+            body: JSON.stringify(body)
+          });
+          created.push(this.parseProductVariant(raw));
+        }
+        return created;
+      }
+      throw error;
     }
-    return created;
   }
 
   async createOrder(order: Partial<Order> & { id: string }) {
