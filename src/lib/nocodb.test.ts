@@ -345,6 +345,99 @@ describe("NocoDBClient (Ecom schema profile)", () => {
     expect(product).toMatchObject({ id: "2", name: "T-Shirt", price: 250, is_active: true });
   });
 
+  it("filters orders by status in a case-tolerant way", async () => {
+    vi.stubGlobal("fetch", vi.fn());
+    const fetchMock = vi.mocked(fetch);
+
+    fetchMock
+      .mockResolvedValueOnce(
+        okJson({
+          list: [{ id: "t-orders", title: "Orders", table_name: "Orders" }]
+        })
+      )
+      .mockResolvedValueOnce(okJson({ list: [] }))
+      .mockResolvedValueOnce(
+        okJson({
+          list: [{ Id: 1, "Customer Name": "A", "Total Amount": 100, Status: "pending" }]
+        })
+      );
+
+    const client = new NocoDBClient();
+    const orders = await client.listOrders({ order_status: "pending" });
+
+    const secondUrl = String(fetchMock.mock.calls[1]?.[0] ?? "");
+    expect(secondUrl).toContain("Status");
+    expect(decodeURIComponent(secondUrl)).toContain("(Status,in,'Pending','pending','PENDING')");
+    expect(orders).toHaveLength(1);
+  });
+
+  it("maps timestamps from common ecom fields", async () => {
+    vi.stubGlobal("fetch", vi.fn());
+    const fetchMock = vi.mocked(fetch);
+
+    fetchMock
+      .mockResolvedValueOnce(
+        okJson({
+          list: [{ id: "t-orders", title: "Orders", table_name: "Orders" }]
+        })
+      )
+      .mockResolvedValueOnce(
+        okJson({
+          list: [
+            {
+              Id: 1,
+              "Customer Name": "A",
+              "Total Amount": 100,
+              Status: "Pending",
+              "Created At": "2026-01-01T00:00:00.000Z",
+              "Updated At": "2026-01-02T00:00:00.000Z"
+            }
+          ]
+        })
+      );
+
+    const client = new NocoDBClient();
+    const orders = await client.listOrders();
+    expect(orders[0]).toMatchObject({ created_at: "2026-01-01T00:00:00.000Z", updated_at: "2026-01-02T00:00:00.000Z" });
+  });
+
+  it("falls back when listing order items by link field fails", async () => {
+    vi.stubGlobal("fetch", vi.fn());
+    const fetchMock = vi.mocked(fetch);
+
+    fetchMock
+      .mockResolvedValueOnce(
+        okJson({
+          list: [{ id: "t-items", title: "Order Items", table_name: "Order Items" }]
+        })
+      )
+      .mockResolvedValueOnce(notOk(400, "Bad where"))
+      .mockResolvedValueOnce(
+        okJson({
+          list: [
+            {
+              Id: 1,
+              "Order ID": "10",
+              "Product SKU": "SKU-1",
+              "Product Name": "Onesie",
+              Quantity: 2,
+              Price: 500
+            }
+          ]
+        })
+      );
+
+    const client = new NocoDBClient();
+    const items = await client.listOrderItems("10");
+    expect(items).toHaveLength(1);
+    expect(items[0]).toMatchObject({ order_id: "10", product_id: "SKU-1", quantity: 2, product_price: 500 });
+
+    const secondUrl = String(fetchMock.mock.calls[1]?.[0] ?? "");
+    const thirdUrl = String(fetchMock.mock.calls[2]?.[0] ?? "");
+    expect(decodeURIComponent(secondUrl)).toContain("Orders_id");
+    expect(decodeURIComponent(thirdUrl).replace(/\+/g, " ")).toContain("Order ID");
+  });
+
   it("maps createOrder and createOrderItem payloads for Ecom base", async () => {
     vi.stubGlobal("fetch", vi.fn());
     const fetchMock = vi.mocked(fetch);
@@ -500,7 +593,6 @@ describe("NocoDBClient (Ecom schema profile)", () => {
           Id: 1,
           Products_id: body.Products_id,
           "Image URL": body["Image URL"],
-          "Display Order": body["Display Order"],
           "Is Thumbnail": body["Is Thumbnail"]
         });
       });
@@ -509,10 +601,10 @@ describe("NocoDBClient (Ecom schema profile)", () => {
     const created = await client.createProductImages("2", [
       { image_url: "http://example.test/a.jpg", display_order: 0, is_primary: true }
     ]);
-    expect(created[0]).toMatchObject({ product_id: "2", image_url: "http://example.test/a.jpg", display_order: 0, is_primary: true });
+    expect(created[0]).toMatchObject({ product_id: "2", image_url: "http://example.test/a.jpg", display_order: null, is_primary: true });
 
     const body1 = JSON.parse(String(fetchMock.mock.calls[1]?.[1]?.body ?? "{}"));
-    expect(body1).toMatchObject({ Products_id: 2, "Image URL": "http://example.test/a.jpg", "Display Order": 0, "Is Thumbnail": true });
+    expect(body1).toMatchObject({ Products_id: 2, "Image URL": "http://example.test/a.jpg", "Is Thumbnail": true });
   });
 
   it("maps product_variations to inventory when available", async () => {

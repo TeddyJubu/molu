@@ -56,13 +56,20 @@ export async function updateOrderStatusAction(formData: FormData) {
   const nocodb = new NocoDBClient();
 
   await nocodb.updateOrder(orderId, { order_status: status as any });
+  const maybeCreateOrderEvent = (nocodb as any).createOrderEvent;
+  if (typeof maybeCreateOrderEvent === "function") {
+    await maybeCreateOrderEvent.call(nocodb, orderId, status).catch((error: unknown) => {
+      console.error("Failed to write order event:", error);
+    });
+  }
 
   try {
     const order = await nocodb.getOrder(orderId);
     await notifyOrderStatusChanged({
       orderId,
       phone: order.customer_phone,
-      status
+      status,
+      customerName: order.customer_name
     });
   } catch (error) {
     console.error("Failed to notify order status change:", error);
@@ -406,4 +413,76 @@ export async function deleteProductVariationAction(args: { id: string; productId
   await nocodb.deleteProductVariation(id);
   revalidatePath("/admin/products");
   if (productId) revalidatePath(`/products/${productId}`);
+}
+
+export async function bulkSetProductsActiveAction(formData: FormData) {
+  if (!isNocoConfigured()) return;
+  const raw = formData.get("productIds");
+  const isActiveRaw = String(formData.get("is_active") ?? "");
+
+  let productIds: string[] = [];
+  if (Array.isArray(raw)) {
+    productIds = raw.map(String);
+  } else if (typeof raw === "string") {
+    const trimmed = raw.trim();
+    if (trimmed.startsWith("[")) {
+      try {
+        const parsed = JSON.parse(trimmed);
+        if (Array.isArray(parsed)) productIds = parsed.map(String);
+      } catch {}
+    } else if (trimmed) {
+      productIds = trimmed.split(",").map((s) => s.trim()).filter(Boolean);
+    }
+  }
+
+  const uniqueIds = Array.from(new Set(productIds.map((id) => String(id).trim()).filter(Boolean)));
+  if (!uniqueIds.length) return;
+
+  const isActive = isActiveRaw === "true" || isActiveRaw === "1";
+  const nocodb = new NocoDBClient();
+
+  for (const id of uniqueIds) {
+    await nocodb.updateProduct(id, { is_active: isActive });
+  }
+
+  revalidatePath("/admin/products");
+  revalidatePath("/products");
+}
+
+export async function getProductsStockSummaryAction(formData: FormData) {
+  if (!isNocoConfigured()) return {};
+  const raw = String(formData.get("productIds") ?? "[]");
+  let ids: string[] = [];
+  try {
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed)) ids = parsed.map(String);
+  } catch {
+    ids = raw.split(",").map((s) => s.trim()).filter(Boolean);
+  }
+
+  const uniqueIds = Array.from(new Set(ids.map((id) => String(id).trim()).filter(Boolean)));
+  if (!uniqueIds.length) return {};
+
+  const nocodb = new NocoDBClient();
+  const maybeListInventory = (nocodb as any).listInventory;
+  if (typeof maybeListInventory !== "function") {
+    const fallback: Record<string, { total: number; low: boolean }> = {};
+    for (const id of uniqueIds) fallback[id] = { total: 0, low: false };
+    return fallback;
+  }
+
+  const out: Record<string, { total: number; low: boolean }> = {};
+  const chunkSize = 8;
+  for (let i = 0; i < uniqueIds.length; i += chunkSize) {
+    const chunk = uniqueIds.slice(i, i + chunkSize);
+    const results = await Promise.all(
+      chunk.map(async (id) => {
+        const items = await maybeListInventory.call(nocodb, id).catch(() => []);
+        const total = (items as Array<{ stock_qty?: number | null }>).reduce((sum: number, row) => sum + Number(row.stock_qty ?? 0), 0);
+        return [id, { total, low: total > 0 && total < 5 }] as const;
+      })
+    );
+    for (const [id, summary] of results) out[id] = summary;
+  }
+  return out;
 }

@@ -1,14 +1,17 @@
 import { isNocoConfigured, NocoDBClient } from "@/lib/nocodb";
-import { ConfigError } from "@/lib/api/errors";
 import { failFromError, ok } from "@/lib/api/response";
+import { demoGetProductDetail } from "@/lib/demoCatalogApi";
 
 export async function GET(_request: Request, context: any) {
   try {
-    if (!isNocoConfigured()) {
-      throw new ConfigError("NocoDB is not configured. Set NOCODB_API_URL, NOCODB_API_TOKEN, NOCODB_PROJECT_ID.");
-    }
     const params = await Promise.resolve(context.params);
     const id = params?.id as string;
+    if (!isNocoConfigured()) {
+      const demo = demoGetProductDetail(id);
+      if (!demo) return ok({ product: null, images: [], inventory: [], options: [], variants: [], variantSource: "none" });
+      return ok(demo);
+    }
+
     const nocodb = new NocoDBClient();
     const [product, images, inventory, config] = await Promise.all([
       nocodb.getProductById(id),

@@ -7,9 +7,11 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/co
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { ProductForm } from "./product-form";
 import { Plus, Pencil, Trash2, Maximize2 } from "lucide-react";
-import { useState } from "react";
+import { useState, useTransition } from "react";
 import { deleteProductAction } from "@/app/admin/_actions";
 import type { Product } from "@/types";
+import { toast } from "sonner";
+import { useRouter } from "next/navigation";
 
 function toFormValues(product: Product) {
   return {
@@ -51,9 +53,10 @@ export function EditProductButton({ product }: { product: Product }) {
         <SheetHeader className="pr-8">
           <div className="flex items-center justify-between">
             <SheetTitle>Edit Product</SheetTitle>
-            <Button asChild variant="ghost" size="icon" aria-label="Open full-page editor">
-              <Link href={`/admin/products/${encodeURIComponent(product.id)}`}>
+            <Button asChild variant="outline" size="sm">
+              <Link href={`/admin/products/${encodeURIComponent(product.id)}`} className="inline-flex items-center gap-2">
                 <Maximize2 className="h-4 w-4" />
+                Full-page editor
               </Link>
             </Button>
           </div>
@@ -67,6 +70,8 @@ export function EditProductButton({ product }: { product: Product }) {
 }
 
 export function DeleteProductButton({ productId }: { productId: string }) {
+  const router = useRouter();
+  const [isPending, startTransition] = useTransition();
   return (
     <AlertDialog>
       <AlertDialogTrigger asChild>
@@ -88,10 +93,25 @@ export function DeleteProductButton({ productId }: { productId: string }) {
         </AlertDialogHeader>
         <AlertDialogFooter>
           <AlertDialogCancel>Cancel</AlertDialogCancel>
-          <form action={deleteProductAction}>
-            <input type="hidden" name="productId" value={productId} />
-            <AlertDialogAction type="submit" className="bg-red-500 hover:bg-red-600">Delete</AlertDialogAction>
-          </form>
+          <AlertDialogAction
+            type="button"
+            disabled={isPending}
+            className="bg-red-500 hover:bg-red-600"
+            onClick={() => {
+              const formData = new FormData();
+              formData.set("productId", productId);
+              startTransition(() => {
+                deleteProductAction(formData)
+                  .then(() => {
+                    toast.success("Product deleted");
+                    router.refresh();
+                  })
+                  .catch(() => toast.error("Failed to delete product"));
+              });
+            }}
+          >
+            Delete
+          </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>

@@ -1,4 +1,5 @@
 import { parseProductsQuery } from "@/lib/productsQuery";
+import { describe, expect, it, vi } from "vitest";
 
 describe("/api/products", () => {
   it("parses query params with defaults and bounds", () => {
@@ -6,14 +7,15 @@ describe("/api/products", () => {
     expect(parseProductsQuery(url)).toEqual({ page: 2, pageSize: 100, is_active: false });
   });
 
-  it("returns 503 when NocoDB is not configured", async () => {
+  it("returns demo products when NocoDB is not configured", async () => {
     vi.resetModules();
     const { GET } = await import("@/app/api/products/route");
     const res = await GET(new Request("http://example.test/api/products"));
-    expect(res.status).toBe(503);
+    expect(res.status).toBe(200);
     const body = await res.json();
-    expect(body.ok).toBe(false);
-    expect(body.error.message).toMatch(/NocoDB is not configured/);
+    expect(body.ok).toBe(true);
+    expect(Array.isArray(body.data.items)).toBe(true);
+    expect(body.data.items.length).toBeGreaterThan(0);
   });
 
   it("returns products when configured", async () => {

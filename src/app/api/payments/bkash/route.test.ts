@@ -55,7 +55,14 @@ describe("/api/payments/bkash", () => {
     const body = await res.json();
     expect(body.ok).toBe(true);
     expect(body.data.paymentUrl).toContain("/pay/mock");
-    expect(updateOrder).toHaveBeenCalled();
+    expect(updateOrder).toHaveBeenCalledWith(
+      "ORD-1",
+      expect.objectContaining({
+        payment_status: "pending",
+        payment_method: "bkash",
+        payment_id: expect.stringMatching(/^BKASH-/)
+      })
+    );
     vi.unmock("@/lib/nocodb");
   });
 

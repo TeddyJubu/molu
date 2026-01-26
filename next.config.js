@@ -2,6 +2,9 @@
 const nextConfig = {
   reactStrictMode: true,
   outputFileTracingRoot: __dirname,
+  serverActions: {
+    bodySizeLimit: "50mb"
+  },
   images: {
     remotePatterns: [
       {

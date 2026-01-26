@@ -1,15 +1,15 @@
 import { describe, expect, it, vi } from "vitest";
 
 describe("/api/products/[id]", () => {
-  it("returns 503 when NocoDB is not configured", async () => {
+  it("returns demo product detail when NocoDB is not configured", async () => {
     vi.resetModules();
     const { GET } = await import("@/app/api/products/[id]/route");
     const res = await GET(new Request("http://example.test/api/products/1"), { params: { id: "1" } });
-    expect(res.status).toBe(503);
+    expect(res.status).toBe(200);
     const body = await res.json();
-    expect(body.ok).toBe(false);
-    expect(body.error.message).toMatch(/NocoDB is not configured/);
-  });
+    expect(body.ok).toBe(true);
+    expect(body.data.product.id).toBe("1");
+  }, 10000);
 
   it("returns product detail when configured", async () => {
     vi.resetModules();

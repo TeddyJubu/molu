@@ -5,6 +5,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { bangladeshPhoneRegex } from "@/lib/validation";
 import { Button } from "@/components/ui/button";
+import { useEffect } from "react";
 import {
   Form,
   FormControl,
@@ -34,23 +35,33 @@ const deliverySchema = z.object({
 
 export type DeliveryFormData = z.infer<typeof deliverySchema>;
 
+const deliveryBaseDefaults: DeliveryFormData = {
+  customer_name: "",
+  customer_phone: "",
+  customer_email: "",
+  customer_address: "",
+  customer_district: "",
+  special_instructions: ""
+};
+
 export interface DeliveryFormProps {
   onSubmit: (data: DeliveryFormData) => void;
+  defaultValues?: Partial<DeliveryFormData>;
+  onDraftChange?: (data: Partial<DeliveryFormData>) => void;
   isLoading?: boolean;
 }
 
-export function DeliveryForm({ onSubmit, isLoading }: DeliveryFormProps) {
+export function DeliveryForm({ onSubmit, isLoading, defaultValues, onDraftChange }: DeliveryFormProps) {
   const form = useForm<DeliveryFormData>({
     resolver: zodResolver(deliverySchema),
-    defaultValues: {
-      customer_name: "",
-      customer_phone: "",
-      customer_email: "",
-      customer_address: "",
-      customer_district: "",
-      special_instructions: ""
-    }
+    defaultValues: { ...deliveryBaseDefaults, ...(defaultValues ?? {}) }
   });
+
+  useEffect(() => {
+    if (!defaultValues) return;
+    if (form.formState.isDirty) return;
+    form.reset({ ...deliveryBaseDefaults, ...defaultValues });
+  }, [defaultValues, form]);
 
   return (
     <Form {...form}>
@@ -62,7 +73,15 @@ export function DeliveryForm({ onSubmit, isLoading }: DeliveryFormProps) {
             <FormItem>
               <FormLabel>Full Name</FormLabel>
               <FormControl>
-                <Input placeholder="John Doe" {...field} />
+                <Input
+                  placeholder="John Doe"
+                  autoComplete="name"
+                  {...field}
+                  onChange={(e) => {
+                    field.onChange(e);
+                    onDraftChange?.(form.getValues());
+                  }}
+                />
               </FormControl>
               <FormMessage />
             </FormItem>
@@ -77,7 +96,17 @@ export function DeliveryForm({ onSubmit, isLoading }: DeliveryFormProps) {
               <FormItem>
                 <FormLabel>Phone Number</FormLabel>
                 <FormControl>
-                  <Input placeholder="+88017..." {...field} />
+                  <Input
+                    placeholder="+88017..."
+                    type="tel"
+                    inputMode="tel"
+                    autoComplete="tel"
+                    {...field}
+                    onChange={(e) => {
+                      field.onChange(e);
+                      onDraftChange?.(form.getValues());
+                    }}
+                  />
                 </FormControl>
                 <FormMessage />
               </FormItem>
@@ -91,7 +120,16 @@ export function DeliveryForm({ onSubmit, isLoading }: DeliveryFormProps) {
               <FormItem>
                 <FormLabel>Email</FormLabel>
                 <FormControl>
-                  <Input placeholder="you@example.com" {...field} />
+                  <Input
+                    placeholder="you@example.com"
+                    type="email"
+                    autoComplete="email"
+                    {...field}
+                    onChange={(e) => {
+                      field.onChange(e);
+                      onDraftChange?.(form.getValues());
+                    }}
+                  />
                 </FormControl>
                 <FormMessage />
               </FormItem>
@@ -105,7 +143,13 @@ export function DeliveryForm({ onSubmit, isLoading }: DeliveryFormProps) {
           render={({ field }) => (
             <FormItem>
               <FormLabel>District</FormLabel>
-              <Select onValueChange={field.onChange} defaultValue={field.value}>
+              <Select
+                onValueChange={(value) => {
+                  field.onChange(value);
+                  onDraftChange?.(form.getValues());
+                }}
+                defaultValue={field.value}
+              >
                 <FormControl>
                   <SelectTrigger>
                     <SelectValue placeholder="Select district" />
@@ -133,7 +177,16 @@ export function DeliveryForm({ onSubmit, isLoading }: DeliveryFormProps) {
             <FormItem>
               <FormLabel>Delivery Address</FormLabel>
               <FormControl>
-                <Textarea placeholder="Street address, building, flat number" className="min-h-[100px]" {...field} />
+                <Textarea
+                  placeholder="Street address, building, flat number"
+                  autoComplete="street-address"
+                  className="min-h-[100px]"
+                  {...field}
+                  onChange={(e) => {
+                    field.onChange(e);
+                    onDraftChange?.(form.getValues());
+                  }}
+                />
               </FormControl>
               <FormMessage />
             </FormItem>
@@ -147,7 +200,15 @@ export function DeliveryForm({ onSubmit, isLoading }: DeliveryFormProps) {
             <FormItem>
               <FormLabel>Special Instructions (Optional)</FormLabel>
               <FormControl>
-                <Textarea placeholder="Any special requests?" className="min-h-[80px]" {...field} />
+                <Textarea
+                  placeholder="Any special requests?"
+                  className="min-h-[80px]"
+                  {...field}
+                  onChange={(e) => {
+                    field.onChange(e);
+                    onDraftChange?.(form.getValues());
+                  }}
+                />
               </FormControl>
               <FormMessage />
             </FormItem>

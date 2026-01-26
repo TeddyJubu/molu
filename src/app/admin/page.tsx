@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { isNocoConfigured, NocoDBClient } from "@/lib/nocodb";
 import { asErrorMessage } from "@/lib/api/errors";
+import { ArrowRight, Package, ReceiptText } from "lucide-react";
+import { RetryButton } from "@/components/admin/RetryButton";
 
 export const dynamic = "force-dynamic";
 
@@ -34,6 +36,9 @@ export default async function AdminPage() {
         <div className="rounded border border-red-200 bg-red-50 p-4 text-sm text-red-900">
           <p className="font-semibold">Failed to load admin data</p>
           <p>{error}</p>
+          <div className="mt-3">
+            <RetryButton />
+          </div>
         </div>
       ) : null}
 
@@ -60,13 +65,39 @@ export default async function AdminPage() {
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2">
-        <Link href="/admin/orders" className="rounded border p-4 hover:bg-muted">
-          <div className="text-base font-semibold">Orders</div>
-          <div className="mt-1 text-sm text-muted-foreground">Review and update order status.</div>
+        <Link
+          href="/admin/orders"
+          className="group flex items-start justify-between gap-4 rounded border p-4 transition hover:bg-muted hover:shadow-sm"
+        >
+          <div>
+            <div className="flex items-center gap-2 text-base font-semibold">
+              <ReceiptText className="h-5 w-5 text-muted-foreground group-hover:text-foreground" />
+              Orders
+            </div>
+            <div className="mt-1 text-sm text-muted-foreground">Review new orders and update fulfillment status.</div>
+            <div className="mt-3 inline-flex items-center gap-1 text-sm font-medium">
+              Open orders
+              <ArrowRight className="h-4 w-4" />
+            </div>
+          </div>
+          <ArrowRight className="mt-1 h-5 w-5 text-muted-foreground transition group-hover:text-foreground" />
         </Link>
-        <Link href="/admin/products" className="rounded border p-4 hover:bg-muted">
-          <div className="text-base font-semibold">Products</div>
-          <div className="mt-1 text-sm text-muted-foreground">Toggle active products for the storefront.</div>
+        <Link
+          href="/admin/products"
+          className="group flex items-start justify-between gap-4 rounded border p-4 transition hover:bg-muted hover:shadow-sm"
+        >
+          <div>
+            <div className="flex items-center gap-2 text-base font-semibold">
+              <Package className="h-5 w-5 text-muted-foreground group-hover:text-foreground" />
+              Products
+            </div>
+            <div className="mt-1 text-sm text-muted-foreground">Create, edit, and manage product visibility.</div>
+            <div className="mt-3 inline-flex items-center gap-1 text-sm font-medium">
+              Open products
+              <ArrowRight className="h-4 w-4" />
+            </div>
+          </div>
+          <ArrowRight className="mt-1 h-5 w-5 text-muted-foreground transition group-hover:text-foreground" />
         </Link>
       </div>
     </main>

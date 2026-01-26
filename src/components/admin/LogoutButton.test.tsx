@@ -35,6 +35,7 @@ describe("LogoutButton", () => {
 
     const button = screen.getByText("Logout");
     fireEvent.click(button);
+    fireEvent.click(screen.getByText("Log out"));
 
     await waitFor(() => {
       expect(global.fetch).toHaveBeenCalledWith("/api/admin/login", {
@@ -58,6 +59,7 @@ describe("LogoutButton", () => {
 
     const button = screen.getByText("Logout");
     fireEvent.click(button);
+    fireEvent.click(screen.getByText("Log out"));
 
     await waitFor(() => {
       expect(toast.error).toHaveBeenCalledWith("An error occurred during logout");

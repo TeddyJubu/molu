@@ -3,7 +3,6 @@ import { isNocoConfigured, NocoDBClient } from "@/lib/nocodb";
 import { initiateBkashPayment } from "@/lib/payments/bkash";
 import { ConfigError, InvalidJsonError } from "@/lib/api/errors";
 import { failFromError, ok } from "@/lib/api/response";
-import { notifyPaymentInitiated } from "@/lib/notifications";
 
 const requestSchema = z.object({
   orderId: z.string().min(1),
@@ -39,18 +38,8 @@ export async function POST(request: Request) {
 
     await nocodb.updateOrder(order.id, {
       payment_id: session.paymentId,
-      payment_status: "pending"
-    });
-
-    await notifyPaymentInitiated({
-      origin,
-      orderId: order.id,
-      email: order.customer_email,
-      phone: order.customer_phone,
-      totalAmount: order.total_amount,
-      paymentMethod: order.payment_method,
-      paymentId: session.paymentId,
-      paymentUrl: session.paymentUrl
+      payment_status: "pending",
+      payment_method: "bkash"
     });
 
     return ok({ paymentUrl: session.paymentUrl, paymentId: session.paymentId });

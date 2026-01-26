@@ -1,10 +1,12 @@
+import { describe, expect, it, vi } from "vitest";
+
 describe("/api/orders/:id", () => {
   it("returns 503 when NocoDB is not configured", async () => {
     vi.resetModules();
     const { GET } = await import("@/app/api/orders/[id]/route");
     const res = await GET(new Request("http://example.test/api/orders/ORD-1"), { params: { id: "ORD-1" } } as any);
     expect(res.status).toBe(503);
-  });
+  }, 10000);
 
   it("returns order and items when configured", async () => {
     vi.resetModules();

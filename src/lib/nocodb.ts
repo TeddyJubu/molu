@@ -147,6 +147,14 @@ const orderItemSchema = z
   .refine((v) => Boolean(v.id ?? v.row_id), { path: ["id"], message: "Missing id" })
   .transform(({ id, row_id, ...rest }) => ({ id: id ?? (row_id as string), ...rest }));
 
+const orderEventSchema = z.object({
+  id: z.union([z.string(), z.number()]).transform(String),
+  order_id: z.string(),
+  status: z.string(),
+  note: z.string().nullable().optional(),
+  created_at: z.string().optional()
+});
+
 type DataApiMode = "v1" | "org-table" | "org-table-id";
 type SchemaProfile = "legacy" | "ecom";
 
@@ -202,7 +210,9 @@ function base64UrlDecode(value: string) {
 }
 
 type EcomOrderMeta = Partial<Pick<Order, "customer_phone" | "customer_email" | "customer_address" | "customer_district">> &
-  Partial<Pick<Order, "special_instructions" | "payment_method" | "payment_status" | "payment_id" | "order_status">>;
+  Partial<Pick<Order, "special_instructions" | "payment_method" | "payment_status" | "payment_id" | "order_status">> & {
+    order_ref?: string;
+  };
 
 function encodeEcomOrderCustomerName(displayName: string, meta: EcomOrderMeta) {
   const safeName = displayName?.trim() || "Customer";
@@ -392,6 +402,35 @@ export class NocoDBClient {
     if (productOptionsTableId || productVariantsTableId || productImagesTableId) this.tableIdByTitle = null;
   }
 
+  private async ensureOrderEventsTable() {
+    const raw = await this.requestJson<unknown>(`/api/v1/db/meta/projects/${this.projectId}/tables`);
+    const tables = Array.isArray((raw as any)?.list) ? (raw as any).list : [];
+    const sourceId = tables[0]?.source_id;
+    if (!sourceId) return;
+
+    const existing =
+      tables.find((t: any) => t?.table_name === "order_events") ?? tables.find((t: any) => t?.title === "Order Events") ?? null;
+    if (existing?.id) return;
+
+    await this.requestJson<unknown>(`/api/v2/meta/bases/${this.projectId}/tables`, {
+      method: "POST",
+      body: JSON.stringify({
+        title: "Order Events",
+        table_name: "order_events",
+        type: "table",
+        source_id: sourceId,
+        columns: [
+          { title: "Id", column_name: "Id", uidt: "ID" },
+          { title: "Order ID", column_name: "order_id", uidt: "SingleLineText" },
+          { title: "Status", column_name: "status", uidt: "SingleLineText" },
+          { title: "Note", column_name: "note", uidt: "LongText" }
+        ]
+      })
+    });
+
+    this.tableIdByTitle = null;
+  }
+
   private async resolveTableSegment(tableTitle: string) {
     if (this.dataApiMode !== "org-table-id") return encodeURIComponent(tableTitle);
     await this.ensureTableIdMap();
@@ -544,12 +583,22 @@ export class NocoDBClient {
       customer_district: meta.customer_district ?? "",
       special_instructions: meta.special_instructions ?? null,
       total_amount: Number((r as any)?.["Total Amount"] ?? 0),
-      payment_method: meta.payment_method ?? "",
-      payment_status: meta.payment_status ?? "",
-      payment_id: meta.payment_id ?? null,
+      payment_method: meta.payment_method ?? String((r as any)?.["Payment Method"] ?? (r as any)?.payment_method ?? ""),
+      payment_status: meta.payment_status ?? String((r as any)?.["Payment Status"] ?? (r as any)?.payment_status ?? ""),
+      payment_id: meta.payment_id ?? ((r as any)?.["Payment ID"] ?? (r as any)?.payment_id ?? null),
       order_status: String(meta.order_status ?? (r as any)?.["Status"] ?? "pending").toLowerCase(),
-      created_at: (r as any)?.CreatedAt ?? (r as any)?.created_at,
-      updated_at: (r as any)?.UpdatedAt ?? (r as any)?.updated_at
+      created_at:
+        (r as any)?.CreatedAt ??
+        (r as any)?.["Created At"] ??
+        (r as any)?.["Created at"] ??
+        (r as any)?.createdAt ??
+        (r as any)?.created_at,
+      updated_at:
+        (r as any)?.UpdatedAt ??
+        (r as any)?.["Updated At"] ??
+        (r as any)?.["Updated at"] ??
+        (r as any)?.updatedAt ??
+        (r as any)?.updated_at
     };
     return orderSchema.parse(mapped) as Order;
   }
@@ -572,6 +621,18 @@ export class NocoDBClient {
       subtotal: Number.isFinite(price * quantity) ? price * quantity : 0
     };
     return orderItemSchema.parse(mapped) as OrderItem;
+  }
+
+  private parseOrderEvent(row: unknown) {
+    const r = unwrapRow(row);
+    const mapped = {
+      id: (r as any)?.Id ?? (r as any)?.id ?? (row as any)?.id,
+      order_id: String((r as any)?.["Order ID"] ?? (r as any)?.order_id ?? ""),
+      status: String((r as any)?.["Status"] ?? (r as any)?.status ?? ""),
+      note: ((r as any)?.["Note"] ?? (r as any)?.note ?? null) as any,
+      created_at: (r as any)?.CreatedAt ?? (r as any)?.created_at
+    };
+    return orderEventSchema.parse(mapped);
   }
 
   async listProducts(params: { page?: number; pageSize?: number; is_active?: boolean } = {}) {
@@ -738,7 +799,7 @@ export class NocoDBClient {
   async createProductImages(
     productId: string,
     images: Array<{ image_url: string; display_order?: number | null; is_primary?: boolean | null }>
-  ) {
+  ): Promise<ProductImage[]> {
     const normalized = images
       .map((img, idx) => ({
         image_url: String(img.image_url ?? "").trim(),
@@ -757,7 +818,6 @@ export class NocoDBClient {
             ? {
                 Products_id: Number(productId),
                 "Image URL": img.image_url,
-                "Display Order": img.display_order ?? 0,
                 "Is Thumbnail": img.is_primary
               }
             : {
@@ -783,7 +843,48 @@ export class NocoDBClient {
     }
   }
 
-  async listFeaturedImages(productIds: string[]) {
+  async replaceProductImages(
+    productId: string,
+    images: Array<{ image_url: string; display_order?: number | null; is_primary?: boolean | null; alt_text?: string | null }>
+  ): Promise<ProductImage[]> {
+    const existing = await this.listProductImages(productId);
+    for (const img of existing) {
+      await this.dataRequestJson<unknown>("product_images", `/${encodeURIComponent(img.id)}`, { method: "DELETE" }).catch(() => {});
+    }
+
+    const normalized = images
+      .map((img, idx) => ({
+        image_url: String(img.image_url ?? "").trim(),
+        display_order: img.display_order ?? idx,
+        is_primary: Boolean(img.is_primary),
+        alt_text: img.alt_text ? String(img.alt_text).trim() : null
+      }))
+      .filter((img) => Boolean(img.image_url));
+
+    if (!normalized.length) return [];
+
+    if (this.schemaProfile === "ecom") {
+      const created: ProductImage[] = [];
+      for (const img of normalized) {
+        const body: Record<string, unknown> = {
+          Products_id: Number(productId),
+          "Image URL": img.image_url,
+          "Is Thumbnail": img.is_primary
+        };
+        if (img.alt_text) body["Alt Text"] = img.alt_text;
+        const raw = await this.dataRequestJson<unknown>("product_images", "", {
+          method: "POST",
+          body: JSON.stringify(body)
+        });
+        created.push(this.parseProductImage(raw));
+      }
+      return created;
+    }
+
+    return this.createProductImages(productId, normalized);
+  }
+
+  async listFeaturedImages(productIds: string[]): Promise<Map<string, string>> {
     const ids = Array.from(new Set(productIds.map((id) => String(id)).filter(Boolean)));
     if (!ids.length) return new Map<string, string>();
 
@@ -1094,6 +1195,7 @@ export class NocoDBClient {
         customer_address: order.customer_address,
         customer_district: order.customer_district,
         special_instructions: order.special_instructions,
+        order_ref: order.id,
         payment_method: order.payment_method,
         payment_status: order.payment_status,
         payment_id: order.payment_id,
@@ -1109,26 +1211,39 @@ export class NocoDBClient {
         method: "POST",
         body: JSON.stringify(mapped)
       });
-      return this.parseOrder(raw);
+      const created = this.parseOrder(raw);
+      if (process.env.NODE_ENV !== "test") {
+        await this.createOrderEvent(created.id, created.order_status ?? "pending", "Order created").catch((error) => {
+          console.error("Failed to write order event:", error);
+        });
+      }
+      return created;
     }
 
     const raw = await this.dataRequestJson<unknown>("orders", "", {
       method: "POST",
       body: JSON.stringify(order)
     });
-    return this.parseOrder(raw);
+    const created = this.parseOrder(raw);
+    if (process.env.NODE_ENV !== "test") {
+      await this.createOrderEvent(created.id, created.order_status ?? "pending", "Order created").catch((error) => {
+        console.error("Failed to write order event:", error);
+      });
+    }
+    return created;
   }
 
-  async createOrderItem(item: Omit<OrderItem, "id">) {
+  async createOrderItem(item: Omit<OrderItem, "id">, orderRowId?: string | number) {
     if (this.schemaProfile === "ecom") {
       const orderIdNum = Number(item.order_id);
+      const rowIdNum = Number(orderRowId);
       const mapped: Record<string, unknown> = {
         "Order ID": item.order_id,
         "Product SKU": item.product_id,
         "Product Name": item.product_name,
         Quantity: item.quantity,
         Price: item.product_price,
-        ...(Number.isFinite(orderIdNum) ? { Orders_id: orderIdNum } : {})
+        ...(Number.isFinite(rowIdNum) ? { Orders_id: rowIdNum } : Number.isFinite(orderIdNum) ? { Orders_id: orderIdNum } : {})
       };
       const raw = await this.dataRequestJson<unknown>("order_items", "", {
         method: "POST",
@@ -1224,8 +1339,10 @@ export class NocoDBClient {
     const filters: string[] = [];
     if (this.schemaProfile === "ecom") {
       if (params.order_status) {
-        const status = String(params.order_status).replace(/^\w/, (c) => c.toUpperCase());
-        filters.push(this.whereEq("Status", status));
+        const statusTitle = String(params.order_status).replace(/^\w/, (c) => c.toUpperCase());
+        const statusLower = String(params.order_status).toLowerCase();
+        const statusUpper = String(params.order_status).toUpperCase();
+        filters.push(this.whereIn("Status", Array.from(new Set([statusTitle, statusLower, statusUpper]))));
       }
     } else {
       if (params.order_status) filters.push(`(order_status,eq,${params.order_status})`);
@@ -1233,23 +1350,117 @@ export class NocoDBClient {
     }
     const where = filters.length ? filters.join("~and") : undefined;
 
-    const raw = await this.dataRequestJson<unknown>("orders", "", undefined, {
-      limit,
-      offset,
-      ...(where ? { where } : {})
-    });
+    const fetchPage = async (whereClause?: string) => {
+      const raw = await this.dataRequestJson<unknown>("orders", "", undefined, {
+        limit,
+        offset,
+        ...(whereClause ? { where: whereClause } : {})
+      });
+      const parsed = listResponseSchema.parse(raw);
+      return parsed.list.map((row) => this.parseOrder(row));
+    };
 
-    const parsed = listResponseSchema.parse(raw);
-    return parsed.list.map((row) => this.parseOrder(row));
+    if (this.schemaProfile === "ecom" && params.order_status) {
+      const expected = String(params.order_status).toLowerCase();
+      try {
+        const filtered = await fetchPage(where);
+        if (filtered.length) return filtered;
+      } catch (error) {
+        if (!(error instanceof UpstreamError && typeof error.upstreamStatus === "number" && error.upstreamStatus < 500)) {
+          throw error;
+        }
+      }
+      const all = await fetchPage(undefined);
+      return all.filter((o) => String(o.order_status ?? "").toLowerCase() === expected);
+    }
+
+    return fetchPage(where);
   }
 
   async listOrderItems(orderId: string) {
-    const where =
-      this.schemaProfile === "ecom" ? this.whereEq("Orders_id", Number(orderId)) : `(order_id,eq,${orderId})`;
-    const raw = await this.dataRequestJson<unknown>("order_items", "", undefined, {
-      where
-    });
-    const parsed = listResponseSchema.parse(raw);
-    return parsed.list.map((row) => this.parseOrderItem(row));
+    if (this.schemaProfile !== "ecom") {
+      const raw = await this.dataRequestJson<unknown>("order_items", "", undefined, {
+        where: `(order_id,eq,${orderId})`
+      });
+      const parsed = listResponseSchema.parse(raw);
+      return parsed.list.map((row) => this.parseOrderItem(row));
+    }
+
+    const tryWhere = async (where: string) => {
+      const raw = await this.dataRequestJson<unknown>("order_items", "", undefined, { where });
+      const parsed = listResponseSchema.parse(raw);
+      return parsed.list.map((row) => this.parseOrderItem(row));
+    };
+
+    const idNum = Number(orderId);
+    const candidates = [
+      ...(Number.isFinite(idNum) ? [this.whereEq("Orders_id", idNum)] : []),
+      this.whereEq("Order ID", String(orderId)),
+      this.whereEq("order_id", String(orderId)),
+      this.whereEq("Order Id", String(orderId))
+    ];
+
+    let lastError: unknown = null;
+    for (const where of Array.from(new Set(candidates))) {
+      try {
+        const items = await tryWhere(where);
+        if (items.length) return items;
+      } catch (error) {
+        if (error instanceof UpstreamError && typeof error.upstreamStatus === "number" && error.upstreamStatus < 500) {
+          lastError = error;
+          continue;
+        }
+        throw error;
+      }
+    }
+
+    if (lastError) throw lastError;
+    return [];
+  }
+
+  async createOrderEvent(orderId: string, status: string, note?: string | null) {
+    const body: Record<string, unknown> = {
+      "Order ID": String(orderId),
+      Status: String(status)
+    };
+    if (note) body["Note"] = String(note);
+
+    try {
+      const raw = await this.dataRequestJson<unknown>("order_events", "", {
+        method: "POST",
+        body: JSON.stringify(body)
+      });
+      return this.parseOrderEvent(raw);
+    } catch (error) {
+      if (error instanceof ConfigError && String(error.message ?? "").includes("order_events")) {
+        await this.ensureOrderEventsTable();
+        const raw = await this.dataRequestJson<unknown>("order_events", "", {
+          method: "POST",
+          body: JSON.stringify(body)
+        });
+        return this.parseOrderEvent(raw);
+      }
+      throw error;
+    }
+  }
+
+  async listOrderEvents(orderId: string) {
+    try {
+      const raw = await this.dataRequestJson<unknown>("order_events", "", undefined, {
+        where: this.whereEq("Order ID", String(orderId)),
+        limit: 200,
+        offset: 0
+      });
+      const parsed = listResponseSchema.parse(raw);
+      const events = parsed.list.map((row) => this.parseOrderEvent(row));
+      return events.sort((a, b) => String(b.created_at ?? "").localeCompare(String(a.created_at ?? "")));
+    } catch (error) {
+      if (error instanceof ConfigError && String(error.message ?? "").includes("order_events")) {
+        await this.ensureOrderEventsTable();
+        return [];
+      }
+      if (error instanceof NotFoundError) return [];
+      throw error;
+    }
   }
 }

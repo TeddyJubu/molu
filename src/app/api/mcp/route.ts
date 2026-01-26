@@ -122,7 +122,7 @@ server.registerTool(
     const noco = new NocoDBClient();
     await noco.updateOrder(id, { order_status: status });
     const order = await noco.getOrder(id);
-    await notifyOrderStatusChanged({ orderId: id, phone: order.customer_phone, status });
+    await notifyOrderStatusChanged({ orderId: id, phone: order.customer_phone, status, customerName: order.customer_name });
     return { content: [{ type: "text", text: `Order ${id} status updated to ${status}` }] };
   }
 );
@@ -151,4 +151,3 @@ export async function POST(request: Request) {
 export async function DELETE(request: Request) {
   return handleMcpRequest(request);
 }
-

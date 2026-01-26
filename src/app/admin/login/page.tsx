@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "sonner";
+import { fetchApiData } from "@/lib/api/client";
 
 export default function AdminLoginPage() {
   const router = useRouter();
@@ -19,21 +20,17 @@ export default function AdminLoginPage() {
     setIsLoading(true);
 
     try {
-      const res = await fetch("/api/admin/login", {
+      await fetchApiData<{ success: true }>("/api/admin/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username, password }),
+        body: JSON.stringify({ username, password })
       });
-
-      if (res.ok) {
-        toast.success("Logged in successfully");
-        router.push("/admin");
-        router.refresh();
-      } else {
-        toast.error("Invalid credentials");
-      }
+      toast.success("Logged in successfully");
+      router.push("/admin");
+      router.refresh();
     } catch (error) {
-      toast.error("An error occurred during login");
+      const message = error instanceof Error ? error.message : "An error occurred during login";
+      toast.error(message);
     } finally {
       setIsLoading(false);
     }

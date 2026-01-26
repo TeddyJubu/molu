@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { LogoutButton } from "@/components/admin/LogoutButton";
+import { Badge } from "@/components/ui/badge";
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -18,6 +19,11 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           </Link>
           <Link href="/admin/products" className="rounded border px-3 py-1 hover:bg-muted">
             Products
+          </Link>
+          <Link href="/admin" aria-label="Admin overview">
+            <Badge variant="secondary" className="cursor-pointer">
+              Admin
+            </Badge>
           </Link>
           <div className="ml-2 border-l pl-3">
             <LogoutButton />

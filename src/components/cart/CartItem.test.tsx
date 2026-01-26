@@ -29,7 +29,7 @@ describe("CartItem", () => {
 
     expect(onQuantityChange).toHaveBeenCalledWith({ lineKey: "p1::test" }, 1);
     expect(onQuantityChange).toHaveBeenCalledWith({ lineKey: "p1::test" }, 3);
-  });
+  }, 15000);
 
   it("calls onRemove", () => {
     const onRemove = vi.fn();

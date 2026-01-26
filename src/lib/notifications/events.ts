@@ -44,7 +44,7 @@ export async function notifyOrderCreated(params: {
         components: [
           {
             type: "body",
-            parameters: [{ type: "text", text: params.orderId }, { type: "text", text: String(params.totalAmount) }]
+            parameters: [{ type: "text", text: params.customerName }, { type: "text", text: params.orderId }]
           }
         ]
       });
@@ -61,54 +61,7 @@ export async function notifyOrderCreated(params: {
         components: [
           {
             type: "body",
-            parameters: [{ type: "text", text: params.orderId }, { type: "text", text: String(params.totalAmount) }]
-          }
-        ]
-      });
-    } catch {}
-  }
-}
-
-export async function notifyPaymentInitiated(params: {
-  origin: string;
-  orderId: string;
-  email: string;
-  phone: string;
-  totalAmount: number;
-  paymentMethod: string;
-  paymentId: string;
-  paymentUrl: string;
-}) {
-  const transactionalId = templateId("LOOPS_TX_PAYMENT_INITIATED_ID");
-  if (transactionalId) {
-    try {
-      await sendLoopsTransactionalEmail({
-        email: params.email,
-        transactionalId,
-        idempotencyKey: `payment_initiated:${params.orderId}:${params.paymentId}`,
-        dataVariables: {
-          orderId: params.orderId,
-          orderUrl: `${params.origin}/order/${params.orderId}`,
-          totalAmount: params.totalAmount,
-          paymentMethod: params.paymentMethod,
-          paymentId: params.paymentId,
-          paymentUrl: params.paymentUrl
-        }
-      });
-    } catch {}
-  }
-
-  const waTemplate = templateId("WHATSAPP_TEMPLATE_PAYMENT_INITIATED");
-  const waTo = normalizeWhatsAppTo(params.phone);
-  if (waTemplate && waTo) {
-    try {
-      await sendWhatsAppTemplateMessage({
-        to: waTo,
-        templateName: waTemplate,
-        components: [
-          {
-            type: "body",
-            parameters: [{ type: "text", text: params.orderId }, { type: "text", text: String(params.totalAmount) }]
+            parameters: [{ type: "text", text: params.customerName }, { type: "text", text: params.orderId }]
           }
         ]
       });
@@ -153,7 +106,7 @@ export async function notifyPaymentCompleted(params: {
         components: [
           {
             type: "body",
-            parameters: [{ type: "text", text: params.orderId }, { type: "text", text: String(params.totalAmount) }]
+            parameters: [{ type: "text", text: String(params.totalAmount) }, { type: "text", text: params.orderId }]
           }
         ]
       });
@@ -166,6 +119,7 @@ export async function notifyPaymentFailed(params: {
   orderId: string;
   email: string;
   phone: string;
+  customerName?: string;
   totalAmount: number;
   paymentMethod: string;
   paymentId: string;
@@ -192,13 +146,18 @@ export async function notifyPaymentFailed(params: {
   const waTo = normalizeWhatsAppTo(params.phone);
   if (waTemplate && waTo) {
     try {
+      const safeName = params.customerName?.trim() || "Customer";
       await sendWhatsAppTemplateMessage({
         to: waTo,
         templateName: waTemplate,
         components: [
           {
             type: "body",
-            parameters: [{ type: "text", text: params.orderId }, { type: "text", text: String(params.totalAmount) }]
+            parameters: [
+              { type: "text", text: safeName },
+              { type: "text", text: String(params.totalAmount) },
+              { type: "text", text: params.orderId }
+            ]
           }
         ]
       });
@@ -206,7 +165,12 @@ export async function notifyPaymentFailed(params: {
   }
 }
 
-export async function notifyOrderStatusChanged(params: { orderId: string; phone: string; status: string }) {
+function estimatedDeliveryDateText(now = new Date()) {
+  const eta = new Date(now.getTime() + 3 * 24 * 60 * 60 * 1000);
+  return eta.toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" });
+}
+
+export async function notifyOrderStatusChanged(params: { orderId: string; phone: string; status: string; customerName?: string }) {
   const normalizedStatus = params.status.trim().toLowerCase();
   const templateEnvName =
     normalizedStatus === "confirmed"
@@ -225,13 +189,25 @@ export async function notifyOrderStatusChanged(params: { orderId: string; phone:
   if (!waTemplate || !waTo) return;
 
   try {
+    const safeName = params.customerName?.trim() || "Customer";
+    const parameters =
+      normalizedStatus === "confirmed"
+        ? [
+            { type: "text", text: safeName },
+            { type: "text", text: params.orderId },
+            { type: "text", text: estimatedDeliveryDateText() }
+          ]
+        : [
+            { type: "text", text: safeName },
+            { type: "text", text: params.orderId }
+          ];
     await sendWhatsAppTemplateMessage({
       to: waTo,
       templateName: waTemplate,
       components: [
         {
           type: "body",
-          parameters: [{ type: "text", text: params.orderId }]
+          parameters
         }
       ]
     });

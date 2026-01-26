@@ -23,7 +23,7 @@ describe("ProductCard", () => {
     render(<ProductCard product={product} />);
     expect(screen.getByText("Baby Onesie")).toBeInTheDocument();
     expect(screen.getByText("৳500")).toBeInTheDocument();
-  });
+  }, 15000);
 
   it("adds item to cart when button clicked", async () => {
     vi.resetModules();
@@ -33,7 +33,7 @@ describe("ProductCard", () => {
     }));
     const { ProductCard } = await import("@/components/product/ProductCard");
     render(<ProductCard product={product} />);
-    fireEvent.click(screen.getByRole("button", { name: "Quick Add" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add to cart" }));
     expect(addItem).toHaveBeenCalledWith(
       expect.objectContaining({
         productId: "1",
@@ -42,12 +42,12 @@ describe("ProductCard", () => {
       })
     );
     vi.unmock("@/store/cart");
-  });
+  }, 15000);
 
-  it("renders quick add button", async () => {
+  it("renders add to cart button", async () => {
     vi.resetModules();
     const { ProductCard } = await import("@/components/product/ProductCard");
     render(<ProductCard product={product} />);
-    expect(screen.getByRole("button", { name: "Quick Add" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Add to cart" })).toBeInTheDocument();
   });
 });

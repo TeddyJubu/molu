@@ -1,3 +1,4 @@
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { UpstreamError } from "@/lib/api/errors";
 import { normalizeWhatsAppTo, sendWhatsAppTemplateMessage } from "@/lib/notifications/whatsapp";
 
@@ -11,6 +12,7 @@ describe("whatsapp notifications", () => {
 
   it("normalizes phone numbers to digits", () => {
     expect(normalizeWhatsAppTo("+8801-234 567 890")).toBe("8801234567890");
+    expect(normalizeWhatsAppTo("01712 345 678")).toBe("8801712345678");
   });
 
   it("does nothing when disabled", async () => {

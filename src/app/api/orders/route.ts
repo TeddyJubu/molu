@@ -41,7 +41,7 @@ export async function POST(request: Request) {
     const id = orderId();
     const origin = new URL(request.url).origin;
 
-    await nocodb.createOrder({
+    const created = await nocodb.createOrder({
       id,
       customer_name: parsed.data.customer_name,
       customer_phone: parsed.data.customer_phone,
@@ -72,7 +72,7 @@ export async function POST(request: Request) {
         color: second,
         quantity: item.quantity,
         subtotal: product_price * item.quantity
-      });
+      }, created.id);
     }
 
     await notifyOrderCreated({

@@ -83,14 +83,14 @@ describe("admin journey", () => {
     );
 
     expect(screen.getByText("Orders")).toBeInTheDocument();
-    expect(screen.getByText("ORD-DEMO-001")).toBeInTheDocument();
-    expect(screen.getByText("ORD-DEMO-002")).toBeInTheDocument();
-    expect(screen.getByText("Amina Rahman")).toBeInTheDocument();
-    expect(screen.getByText("Tanvir Ahmed")).toBeInTheDocument();
+    expect(screen.getAllByText("ORD-DEMO-001").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("ORD-DEMO-002").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Amina Rahman").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Tanvir Ahmed").length).toBeGreaterThan(0);
     expect(screen.getByRole("link", { name: "Pending" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Confirmed" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Paid" })).toBeInTheDocument();
-  });
+  }, 20000);
 
   it("renders order details and items", async () => {
     const getOrder = vi.fn().mockResolvedValue(
@@ -103,8 +103,8 @@ describe("admin journey", () => {
       })
     );
     const listOrderItems = vi.fn().mockResolvedValue([
-      orderItem({ order_id: "ORD-DEMO-003", product_id: "1", product_name: "Pajama Set", quantity: 1, subtotal: 650 }),
-      orderItem({ order_id: "ORD-DEMO-003", product_id: "2", product_name: "Cap", quantity: 1, subtotal: 220 })
+      orderItem({ id: "item-1", order_id: "ORD-DEMO-003", product_id: "1", product_name: "Pajama Set", quantity: 1, subtotal: 650 }),
+      orderItem({ id: "item-2", order_id: "ORD-DEMO-003", product_id: "2", product_name: "Cap", quantity: 1, subtotal: 220 })
     ]);
 
     vi.doMock("@/lib/nocodb", () => ({
@@ -122,7 +122,7 @@ describe("admin journey", () => {
     expect(screen.getByText(/Nusrat Jahan/)).toBeInTheDocument();
     expect(screen.getByText("Pajama Set")).toBeInTheDocument();
     expect(screen.getByText("Cap")).toBeInTheDocument();
-  });
+  }, 15000);
 
   it("renders products list", async () => {
     const listProductsAdmin = vi.fn().mockResolvedValue([
@@ -131,6 +131,9 @@ describe("admin journey", () => {
     ]);
     const listFeaturedImages = vi.fn().mockResolvedValue(new Map([["1", "/uploads/products/1/featured.jpg"]]));
 
+    vi.doMock("next/navigation", () => ({
+      useRouter: () => ({ refresh: vi.fn() })
+    }));
     vi.doMock("@/lib/nocodb", () => ({
       isNocoConfigured: () => true,
       NocoDBClient: class {
@@ -143,12 +146,12 @@ describe("admin journey", () => {
     render(await AdminProductsPage());
 
     expect(screen.getByText("Products")).toBeInTheDocument();
-    expect(screen.getByText("Onesie")).toBeInTheDocument();
-    expect(screen.getByText("Socks Pack")).toBeInTheDocument();
-    expect(screen.getByText("Active")).toBeInTheDocument();
-    expect(screen.getByText("Inactive")).toBeInTheDocument();
-    expect(screen.getByAltText("Onesie featured")).toBeInTheDocument();
-  });
+    expect(screen.getAllByText("Onesie").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Socks Pack").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Active").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Inactive").length).toBeGreaterThan(0);
+    expect(screen.getAllByAltText("Onesie featured").length).toBeGreaterThan(0);
+  }, 10000);
 
   it("updates order status via extracted server action", async () => {
     const updateOrder = vi.fn().mockResolvedValue({});

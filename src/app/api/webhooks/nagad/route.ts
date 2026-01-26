@@ -43,6 +43,7 @@ export async function POST(request: Request) {
     const nocodb = new NocoDBClient();
     const order = await nocodb.getOrder(parsed.data.orderId);
     const origin = new URL(request.url).origin;
+    const paymentMethod = order.payment_method || "nagad";
 
     if (order.payment_status === "completed") {
       return ok({ status: "already_completed" });
@@ -53,25 +54,35 @@ export async function POST(request: Request) {
     }
 
     if (parsed.data.status === "completed") {
-      await nocodb.updateOrder(order.id, { payment_status: "completed", order_status: "confirmed" });
+      await nocodb.updateOrder(order.id, {
+        payment_status: "completed",
+        order_status: "confirmed",
+        payment_id: parsed.data.paymentId,
+        ...(order.payment_method ? {} : { payment_method: paymentMethod })
+      });
       await notifyPaymentCompleted({
         origin,
         orderId: order.id,
         email: order.customer_email,
         phone: order.customer_phone,
         totalAmount: order.total_amount,
-        paymentMethod: order.payment_method,
+        paymentMethod,
         paymentId: parsed.data.paymentId
       });
     } else {
-      await nocodb.updateOrder(order.id, { payment_status: "failed" });
+      await nocodb.updateOrder(order.id, {
+        payment_status: "failed",
+        payment_id: parsed.data.paymentId,
+        ...(order.payment_method ? {} : { payment_method: paymentMethod })
+      });
       await notifyPaymentFailed({
         origin,
         orderId: order.id,
         email: order.customer_email,
         phone: order.customer_phone,
+        customerName: order.customer_name,
         totalAmount: order.total_amount,
-        paymentMethod: order.payment_method,
+        paymentMethod,
         paymentId: parsed.data.paymentId
       });
     }

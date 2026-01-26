@@ -6,6 +6,9 @@ import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { ShoppingBag } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { products } from "@/lib/demo-data";
+import Image from "next/image";
+import Link from "next/link";
 
 export function CartSheetContent({ onNavigate }: { onNavigate?: () => void }) {
   const router = useRouter();
@@ -15,8 +18,9 @@ export function CartSheetContent({ onNavigate }: { onNavigate?: () => void }) {
   const total = useCart((s) => s.total());
 
   if (items.length === 0) {
+    const recommended = products.slice(0, 3);
     return (
-      <div className="flex h-full flex-col items-center justify-center space-y-4">
+      <div className="flex h-full flex-col justify-center space-y-6">
         <div className="flex h-16 w-16 items-center justify-center rounded-full bg-muted">
           <ShoppingBag className="h-8 w-8 text-muted-foreground" />
         </div>
@@ -24,16 +28,68 @@ export function CartSheetContent({ onNavigate }: { onNavigate?: () => void }) {
           <p className="text-lg font-medium">Your cart is empty</p>
           <p className="text-sm text-muted-foreground">Add some items to start shopping.</p>
         </div>
-        <Button
-          variant="outline"
-          className="mt-4"
-          onClick={() => {
-            router.push("/products");
-            onNavigate?.();
-          }}
-        >
-          Browse Products
-        </Button>
+        <div className="flex items-center justify-center gap-2">
+          <Button
+            onClick={() => {
+              router.push("/products");
+              onNavigate?.();
+            }}
+          >
+            Browse Products
+          </Button>
+          <Button
+            variant="outline"
+            onClick={() => {
+              router.push("/products?category=boys");
+              onNavigate?.();
+            }}
+          >
+            Shop Boys
+          </Button>
+          <Button
+            variant="outline"
+            onClick={() => {
+              router.push("/products?category=girls");
+              onNavigate?.();
+            }}
+          >
+            Shop Girls
+          </Button>
+        </div>
+
+        <div className="space-y-3">
+          <div className="flex items-baseline justify-between">
+            <p className="text-sm font-medium">Popular right now</p>
+            <Link
+              href="/products"
+              className="text-xs text-muted-foreground hover:text-foreground"
+              onClick={() => onNavigate?.()}
+            >
+              View all
+            </Link>
+          </div>
+          <div className="grid gap-3">
+            {recommended.map((p) => (
+              <Link
+                key={p.id}
+                href={`/products/${p.id}`}
+                className="flex items-center gap-3 rounded-lg border bg-card p-3 hover:bg-muted/50"
+                onClick={() => onNavigate?.()}
+              >
+                <div className="relative h-14 w-14 overflow-hidden rounded-md bg-secondary/10">
+                  <Image src={p.image} alt={p.name} fill className="object-cover" sizes="56px" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-medium line-clamp-1">{p.name}</p>
+                  <p className="text-xs text-muted-foreground capitalize">{p.category}</p>
+                </div>
+                <p className="text-sm font-semibold text-primary">৳{p.price}</p>
+              </Link>
+            ))}
+          </div>
+
+          <p className="text-xs text-muted-foreground text-center">Checkout is quick and secure.</p>
+        </div>
       </div>
     );
   }

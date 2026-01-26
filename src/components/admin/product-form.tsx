@@ -77,6 +77,7 @@ export function ProductForm({
   const [variants, setVariants] = useState<VariantDraft[]>([{ options: {}, stock_qty: 0, price: null }]);
   const [isLoadingConfig, setIsLoadingConfig] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [section, setSection] = useState<"basic" | "media" | "attributes" | "variants">("basic");
 
   useEffect(() => {
     imagesRef.current = images;
@@ -366,63 +367,88 @@ export function ProductForm({
         }}
         className="space-y-4"
       >
-        <FormField
-          control={form.control}
-          name="name"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Name</FormLabel>
-              <FormControl>
-                <Input placeholder="Product Name" {...field} />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-        <div className="flex gap-4">
-            <FormField
-            control={form.control}
-            name="price"
-            render={({ field }) => (
-                <FormItem className="flex-1">
-                <FormLabel>Price</FormLabel>
-                <FormControl>
-                    <Input type="number" placeholder="0" {...field} />
-                </FormControl>
-                <FormMessage />
-                </FormItem>
-            )}
-            />
-            <FormField
-            control={form.control}
-            name="brand"
-            render={({ field }) => (
-                <FormItem className="flex-1">
-                <FormLabel>Brand</FormLabel>
-                <FormControl>
-                    <Input placeholder="Brand" {...field} value={field.value || ""} />
-                </FormControl>
-                <FormMessage />
-                </FormItem>
-            )}
-            />
+        <div className="flex flex-wrap gap-2">
+          <Button type="button" variant={section === "basic" ? "secondary" : "outline"} size="sm" onClick={() => setSection("basic")}>
+            Basic
+          </Button>
+          {!productId ? (
+            <Button type="button" variant={section === "media" ? "secondary" : "outline"} size="sm" onClick={() => setSection("media")}>
+              Media
+            </Button>
+          ) : null}
+          <Button
+            type="button"
+            variant={section === "attributes" ? "secondary" : "outline"}
+            size="sm"
+            onClick={() => setSection("attributes")}
+          >
+            Attributes
+          </Button>
+          <Button type="button" variant={section === "variants" ? "secondary" : "outline"} size="sm" onClick={() => setSection("variants")}>
+            Variants
+          </Button>
         </div>
-        
-        <FormField
-          control={form.control}
-          name="description"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Description</FormLabel>
-              <FormControl>
-                <Textarea placeholder="Product description..." {...field} value={field.value || ""} />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
 
-        {!productId ? (
+        {section === "basic" ? (
+          <div className="space-y-4">
+            <FormField
+              control={form.control}
+              name="name"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Name</FormLabel>
+                  <FormControl>
+                    <Input placeholder="Product Name" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <div className="flex gap-4">
+              <FormField
+                control={form.control}
+                name="price"
+                render={({ field }) => (
+                  <FormItem className="flex-1">
+                    <FormLabel>Price</FormLabel>
+                    <FormControl>
+                      <Input type="number" placeholder="0" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="brand"
+                render={({ field }) => (
+                  <FormItem className="flex-1">
+                    <FormLabel>Brand</FormLabel>
+                    <FormControl>
+                      <Input placeholder="Brand" {...field} value={field.value || ""} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+            <FormField
+              control={form.control}
+              name="description"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Description</FormLabel>
+                  <FormControl>
+                    <Textarea placeholder="Product description..." {...field} value={field.value || ""} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          </div>
+        ) : null}
+
+        {section === "media" && !productId ? (
           <div className="space-y-3 pt-2">
             <div className="flex items-center justify-between gap-3">
               <div className="flex flex-col">
@@ -466,187 +492,191 @@ export function ProductForm({
           </div>
         ) : null}
 
-        <div className="space-y-3 pt-2">
-          <div className="flex items-center justify-between gap-3">
-            <div className="flex flex-col">
-              <div className="text-sm font-medium">Attributes</div>
-              <div className="text-xs text-muted-foreground">Add attributes (e.g. Size, Color, Age Range) to create variants.</div>
-            </div>
-            <div className="flex items-center gap-2">
-              <Button type="button" variant="outline" size="sm" onClick={() => addOption("Size")}>
-                Add Size
-              </Button>
-              <Button type="button" variant="outline" size="sm" onClick={() => addOption("Color")}>
-                Add Color
-              </Button>
-              <Button type="button" variant="outline" size="sm" onClick={() => addOption("Age Range")}>
-                Add Age Range
-              </Button>
-              <Button type="button" variant="outline" size="sm" onClick={() => addOption("")}>
-                Add Custom
-              </Button>
-            </div>
-          </div>
-
-          {isLoadingConfig ? <div className="text-sm text-muted-foreground">Loading attributes…</div> : null}
-
-          {options.length === 0 && !isLoadingConfig ? (
-            <div className="rounded border bg-muted/30 p-3 text-sm text-muted-foreground">No attributes yet.</div>
-          ) : null}
-
-          {options.map((opt, idx) => (
-            <div key={`opt-${idx}`} className="space-y-2 rounded border p-3">
-              <div className="flex items-end gap-2">
-                <div className="flex-1">
-                  <Label>Attribute Name</Label>
-                  <Input value={opt.name} onChange={(e) => renameOption(idx, e.target.value)} placeholder="e.g. Size" />
-                </div>
-                <Button type="button" variant="outline" size="icon" onClick={() => removeOption(idx)} aria-label="Remove attribute">
-                  <X className="h-4 w-4" />
+        {section === "attributes" ? (
+          <div className="space-y-3 pt-2">
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex flex-col">
+                <div className="text-sm font-medium">Attributes</div>
+                <div className="text-xs text-muted-foreground">Add attributes (e.g. Size, Color, Age Range) to create variants.</div>
+              </div>
+              <div className="flex items-center gap-2">
+                <Button type="button" variant="outline" size="sm" onClick={() => addOption("Size")}>
+                  Add Size
+                </Button>
+                <Button type="button" variant="outline" size="sm" onClick={() => addOption("Color")}>
+                  Add Color
+                </Button>
+                <Button type="button" variant="outline" size="sm" onClick={() => addOption("Age Range")}>
+                  Add Age Range
+                </Button>
+                <Button type="button" variant="outline" size="sm" onClick={() => addOption("")}>
+                  Add Custom
                 </Button>
               </div>
+            </div>
 
-              <div className="space-y-2">
-                <Label>Values</Label>
-                <div className="flex flex-wrap gap-2">
-                  {(opt.values ?? []).map((value) => (
-                    <Badge key={`${idx}-${value}`} variant="secondary" className="gap-1">
-                      {value}
-                      <X className="h-3 w-3 cursor-pointer" onClick={() => removeOptionValue(idx, value)} />
-                    </Badge>
-                  ))}
-                </div>
-                <div className="flex gap-2">
-                  <Input
-                    value={newValueByOption[idx] ?? ""}
-                    onChange={(e) => setNewValueByOption((prev) => ({ ...prev, [idx]: e.target.value }))}
-                    placeholder="Add value (e.g. XL)"
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") {
-                        e.preventDefault();
-                        addOptionValue(idx);
-                      }
-                    }}
-                  />
-                  <Button type="button" size="icon" variant="outline" onClick={() => addOptionValue(idx)} aria-label="Add value">
-                    <Plus className="h-4 w-4" />
+            {isLoadingConfig ? <div className="text-sm text-muted-foreground">Loading attributes…</div> : null}
+
+            {options.length === 0 && !isLoadingConfig ? (
+              <div className="rounded border bg-muted/30 p-3 text-sm text-muted-foreground">No attributes yet.</div>
+            ) : null}
+
+            {options.map((opt, idx) => (
+              <div key={`opt-${idx}`} className="space-y-2 rounded border p-3">
+                <div className="flex items-end gap-2">
+                  <div className="flex-1">
+                    <Label>Attribute Name</Label>
+                    <Input value={opt.name} onChange={(e) => renameOption(idx, e.target.value)} placeholder="e.g. Size" />
+                  </div>
+                  <Button type="button" variant="outline" size="icon" onClick={() => removeOption(idx)} aria-label="Remove attribute">
+                    <X className="h-4 w-4" />
                   </Button>
                 </div>
-              </div>
-            </div>
-          ))}
-        </div>
 
-        <div className="space-y-3 pt-4">
-          <div className="flex items-center justify-between gap-3">
-            <div className="flex flex-col">
-              <div className="text-sm font-medium">Variants</div>
-              <div className="text-xs text-muted-foreground">
-                {normalizedOptions.length ? `${combinationCount} possible combinations` : "Single default variant (no attributes)."}
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={generateVariants}
-                disabled={!normalizedOptions.length || normalizedOptions.some((o) => o.values.length === 0)}
-              >
-                Generate
-              </Button>
-              <Button type="button" variant="outline" size="sm" onClick={addVariantRow} disabled={!normalizedOptions.length}>
-                Add Row
-              </Button>
-            </div>
-          </div>
-
-          {!normalizedOptions.length ? (
-            <div className="rounded border p-3">
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
-                <div className="w-full sm:w-48">
-                  <Label>Stock Qty</Label>
-                  <Input
-                    type="number"
-                    value={String(variants[0]?.stock_qty ?? 0)}
-                    onChange={(e) => setVariants([{ options: {}, stock_qty: Number(e.target.value), price: variants[0]?.price ?? null }])}
-                    min={0}
-                  />
-                </div>
-                <div className="w-full sm:w-48">
-                  <Label>Price (Optional)</Label>
-                  <Input
-                    type="number"
-                    value={variants[0]?.price === null ? "" : String(variants[0]?.price)}
-                    onChange={(e) =>
-                      setVariants([{ options: {}, stock_qty: variants[0]?.stock_qty ?? 0, price: e.target.value ? Number(e.target.value) : null }])
-                    }
-                    min={0}
-                    placeholder="Use product price"
-                  />
-                </div>
-              </div>
-            </div>
-          ) : (
-            <div className="space-y-2">
-              {variants.length === 0 ? <div className="text-sm text-muted-foreground">No variants yet. Click Generate.</div> : null}
-              {variants.map((v, idx) => (
-                <div key={`var-${idx}`} className="flex flex-col gap-2 rounded border p-3 sm:flex-row sm:items-end">
-                  {normalizedOptions.map((opt) => (
-                    <div key={`${idx}-${opt.name}`} className="flex-1">
-                      <Label>{opt.name}</Label>
-                      <Input
-                        value={String((v.options ?? {})[opt.name] ?? "")}
-                        onChange={(e) =>
-                          setVariants((prev) =>
-                            prev.map((row, i) =>
-                              i === idx ? { ...row, options: { ...(row.options ?? {}), [opt.name]: e.target.value } } : row
-                            )
-                          )
+                <div className="space-y-2">
+                  <Label>Values</Label>
+                  <div className="flex flex-wrap gap-2">
+                    {(opt.values ?? []).map((value) => (
+                      <Badge key={`${idx}-${value}`} variant="secondary" className="gap-1">
+                        {value}
+                        <X className="h-3 w-3 cursor-pointer" onClick={() => removeOptionValue(idx, value)} />
+                      </Badge>
+                    ))}
+                  </div>
+                  <div className="flex gap-2">
+                    <Input
+                      value={newValueByOption[idx] ?? ""}
+                      onChange={(e) => setNewValueByOption((prev) => ({ ...prev, [idx]: e.target.value }))}
+                      placeholder="Add value (e.g. XL)"
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          addOptionValue(idx);
                         }
-                        placeholder={opt.values[0] ? `e.g. ${opt.values[0]}` : "Value"}
-                      />
-                    </div>
-                  ))}
-                  <div className="w-full sm:w-32">
-                    <Label>Price</Label>
+                      }}
+                    />
+                    <Button type="button" size="icon" variant="outline" onClick={() => addOptionValue(idx)} aria-label="Add value">
+                      <Plus className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : null}
+
+        {section === "variants" ? (
+          <div className="space-y-3 pt-2">
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex flex-col">
+                <div className="text-sm font-medium">Variants</div>
+                <div className="text-xs text-muted-foreground">
+                  {normalizedOptions.length ? `${combinationCount} possible combinations` : "Single default variant (no attributes)."}
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={generateVariants}
+                  disabled={!normalizedOptions.length || normalizedOptions.some((o) => o.values.length === 0)}
+                >
+                  Generate
+                </Button>
+                <Button type="button" variant="outline" size="sm" onClick={addVariantRow} disabled={!normalizedOptions.length}>
+                  Add Row
+                </Button>
+              </div>
+            </div>
+
+            {!normalizedOptions.length ? (
+              <div className="rounded border p-3">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+                  <div className="w-full sm:w-48">
+                    <Label>Stock Qty</Label>
                     <Input
                       type="number"
-                      value={v.price === null ? "" : String(v.price)}
+                      value={String(variants[0]?.stock_qty ?? 0)}
+                      onChange={(e) => setVariants([{ options: {}, stock_qty: Number(e.target.value), price: variants[0]?.price ?? null }])}
+                      min={0}
+                    />
+                  </div>
+                  <div className="w-full sm:w-48">
+                    <Label>Price (Optional)</Label>
+                    <Input
+                      type="number"
+                      value={variants[0]?.price === null ? "" : String(variants[0]?.price)}
                       onChange={(e) =>
-                        setVariants((prev) =>
-                          prev.map((row, i) => (i === idx ? { ...row, price: e.target.value ? Number(e.target.value) : null } : row))
-                        )
+                        setVariants([{ options: {}, stock_qty: variants[0]?.stock_qty ?? 0, price: e.target.value ? Number(e.target.value) : null }])
                       }
                       min={0}
                       placeholder="Use product price"
                     />
                   </div>
-                  <div className="w-full sm:w-32">
-                    <Label>Stock</Label>
-                    <Input
-                      type="number"
-                      value={String(v.stock_qty)}
-                      onChange={(e) =>
-                        setVariants((prev) => prev.map((row, i) => (i === idx ? { ...row, stock_qty: Number(e.target.value) } : row)))
-                      }
-                      min={0}
-                    />
-                  </div>
-                  <div className="flex gap-2">
-                    <Button type="button" variant="outline" className="text-red-600" onClick={() => removeVariantRow(idx)}>
-                      Delete
-                    </Button>
-                  </div>
                 </div>
-              ))}
-            </div>
-          )}
-        </div>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {variants.length === 0 ? <div className="text-sm text-muted-foreground">No variants yet. Click Generate.</div> : null}
+                {variants.map((v, idx) => (
+                  <div key={`var-${idx}`} className="flex flex-col gap-2 rounded border p-3 sm:flex-row sm:items-end">
+                    {normalizedOptions.map((opt) => (
+                      <div key={`${idx}-${opt.name}`} className="flex-1">
+                        <Label>{opt.name}</Label>
+                        <Input
+                          value={String((v.options ?? {})[opt.name] ?? "")}
+                          onChange={(e) =>
+                            setVariants((prev) =>
+                              prev.map((row, i) =>
+                                i === idx ? { ...row, options: { ...(row.options ?? {}), [opt.name]: e.target.value } } : row
+                              )
+                            )
+                          }
+                          placeholder={opt.values[0] ? `e.g. ${opt.values[0]}` : "Value"}
+                        />
+                      </div>
+                    ))}
+                    <div className="w-full sm:w-32">
+                      <Label>Price</Label>
+                      <Input
+                        type="number"
+                        value={v.price === null ? "" : String(v.price)}
+                        onChange={(e) =>
+                          setVariants((prev) =>
+                            prev.map((row, i) => (i === idx ? { ...row, price: e.target.value ? Number(e.target.value) : null } : row))
+                          )
+                        }
+                        min={0}
+                        placeholder="Use product price"
+                      />
+                    </div>
+                    <div className="w-full sm:w-32">
+                      <Label>Stock</Label>
+                      <Input
+                        type="number"
+                        value={String(v.stock_qty)}
+                        onChange={(e) =>
+                          setVariants((prev) => prev.map((row, i) => (i === idx ? { ...row, stock_qty: Number(e.target.value) } : row)))
+                        }
+                        min={0}
+                      />
+                    </div>
+                    <div className="flex gap-2">
+                      <Button type="button" variant="outline" className="text-red-600" onClick={() => removeVariantRow(idx)}>
+                        Delete
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        ) : null}
 
         <div className="flex justify-end gap-2 pt-2">
           <Button type="submit" disabled={isSaving || form.formState.isSubmitting}>
-            {defaultValues?.id ? "Update Product" : "Create Product"}
+            {isSaving ? "Saving…" : defaultValues?.id ? "Update Product" : "Create Product"}
           </Button>
         </div>
       </form>

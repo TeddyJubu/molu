@@ -98,6 +98,47 @@ describe("/api/webhooks/nagad", () => {
     vi.unmock("@/lib/nocodb");
   });
 
+  it("sets payment method when missing", async () => {
+    vi.resetModules();
+
+    const updateOrder = vi.fn().mockResolvedValue({});
+    const notifyPaymentCompleted = vi.fn().mockResolvedValue(undefined);
+    const notifyPaymentFailed = vi.fn().mockResolvedValue(undefined);
+    vi.doMock("@/lib/notifications", () => ({ notifyPaymentCompleted, notifyPaymentFailed }));
+    vi.doMock("@/lib/nocodb", () => ({
+      isNocoConfigured: () => true,
+      NocoDBClient: class {
+        async getOrder() {
+          return {
+            id: "ORD-1",
+            payment_status: "pending",
+            payment_id: "P",
+            customer_email: "a@b.com",
+            customer_phone: "+880123456789",
+            total_amount: 1000,
+            payment_method: ""
+          };
+        }
+        updateOrder = updateOrder;
+      }
+    }));
+
+    const { POST } = await import("@/app/api/webhooks/nagad/route");
+    const res = await POST(
+      new Request("http://example.test/api/webhooks/nagad", {
+        method: "POST",
+        body: JSON.stringify({ orderId: "ORD-1", paymentId: "P", status: "completed" })
+      })
+    );
+    expect(res.status).toBe(200);
+    expect(updateOrder).toHaveBeenCalledWith(
+      "ORD-1",
+      expect.objectContaining({ payment_status: "completed", payment_method: "nagad" })
+    );
+    vi.unmock("@/lib/nocodb");
+    vi.unmock("@/lib/notifications");
+  });
+
   it("updates order on failed payment", async () => {
     vi.resetModules();
 
@@ -129,6 +170,7 @@ describe("/api/webhooks/nagad", () => {
     );
     expect(res.status).toBe(200);
     expect(updateOrder).toHaveBeenCalledWith("ORD-1", expect.objectContaining({ payment_status: "failed" }));
+    expect(updateOrder).toHaveBeenCalledWith("ORD-1", expect.objectContaining({ payment_id: "P" }));
     vi.unmock("@/lib/nocodb");
   });
 });
