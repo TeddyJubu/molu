@@ -143,7 +143,7 @@ describe("admin journey", () => {
     }));
 
     const { default: AdminProductsPage } = await import("@/app/admin/products/page");
-    render(await AdminProductsPage());
+    render(await AdminProductsPage({ searchParams: Promise.resolve({}) }));
 
     expect(screen.getByText("Products")).toBeInTheDocument();
     expect(screen.getAllByText("Onesie").length).toBeGreaterThan(0);

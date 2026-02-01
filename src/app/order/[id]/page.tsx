@@ -3,9 +3,11 @@ import { notFound } from "next/navigation";
 import { isNocoConfigured, NocoDBClient } from "@/lib/nocodb";
 import { NotFoundError } from "@/lib/api/errors";
 import { OrderPaymentStatus } from "@/components/order/OrderPaymentStatus";
+import { WhatsAppOrderWidget } from "@/components/order/WhatsAppOrderWidget";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
+import { formatOrderWhatsAppMessage } from "@/lib/whatsapp/order-message";
 
 export default async function OrderPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -32,6 +34,7 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
   try {
     const nocodb = new NocoDBClient();
     const [order, items] = await Promise.all([nocodb.getOrder(id), nocodb.listOrderItems(id)]);
+    const whatsAppMessage = formatOrderWhatsAppMessage(order, items);
 
     return (
       <main className="mx-auto max-w-2xl space-y-6 p-6">
@@ -48,6 +51,8 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
           paymentMethod={order.payment_method}
           totalAmount={order.total_amount}
         />
+
+        <WhatsAppOrderWidget message={whatsAppMessage} />
 
         <Card>
           <CardHeader>

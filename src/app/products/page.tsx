@@ -7,25 +7,26 @@ import { ProductsSearchBar } from "@/components/product/ProductsSearchBar";
 import { ChevronRight } from "lucide-react";
 
 interface ProductsPageProps {
-  searchParams: {
+  searchParams?: Promise<{
     category?: string | string[];
     query?: string | string[];
     price?: string | string[];
     size?: string | string[];
     color?: string | string[];
-  };
+  }>;
 }
 
 function paramValue(value: string | string[] | undefined) {
   return (Array.isArray(value) ? value[0] : value) ?? "";
 }
 
-export default function ProductsPage({ searchParams }: ProductsPageProps) {
-  const categoryFilter = paramValue(searchParams.category).trim();
-  const queryValue = paramValue(searchParams.query);
-  const priceFilter = paramValue(searchParams.price).trim().toLowerCase();
-  const sizeFilter = paramValue(searchParams.size).trim();
-  const colorFilter = paramValue(searchParams.color).trim();
+export default async function ProductsPage({ searchParams }: ProductsPageProps) {
+  const params = (searchParams ? await searchParams : {}) ?? {};
+  const categoryFilter = paramValue(params.category).trim();
+  const queryValue = paramValue(params.query);
+  const priceFilter = paramValue(params.price).trim().toLowerCase();
+  const sizeFilter = paramValue(params.size).trim();
+  const colorFilter = paramValue(params.color).trim();
 
   const normalizedQuery = queryValue.trim().toLowerCase();
   const matchesPrice = (value: number) => {

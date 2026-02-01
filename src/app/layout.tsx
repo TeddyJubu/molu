@@ -1,7 +1,8 @@
 import "./globals.css";
-import type { ReactNode } from "react";
+import { Suspense, type ReactNode } from "react";
 import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
+import { FloatingWhatsAppButton } from "@/components/layout/FloatingWhatsAppButton";
 import { Baloo_2 } from "next/font/google";
 import { cn } from "@/lib/utils";
 import { Toaster } from "@/components/ui/sonner";
@@ -24,12 +25,17 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         "min-h-screen bg-background text-foreground antialiased",
         baloo.className
       )}>
-        <Header />
+        <Suspense fallback={null}>
+          <Header />
+        </Suspense>
         <main>
           {children}
         </main>
         <Footer />
         <Toaster />
+        <Suspense fallback={null}>
+          <FloatingWhatsAppButton />
+        </Suspense>
       </body>
     </html>
   );

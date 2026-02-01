@@ -1,5 +1,6 @@
 import { sendLoopsTransactionalEmail } from "@/lib/notifications/loops";
 import { normalizeWhatsAppTo, sendWhatsAppTemplateMessage } from "@/lib/notifications/whatsapp";
+import { parseWhatsAppRecipients } from "@/lib/whatsapp/click-to-chat";
 
 function templateId(name: string) {
   const value = process.env[name];
@@ -52,20 +53,22 @@ export async function notifyOrderCreated(params: {
   }
 
   const adminToRaw = process.env.WHATSAPP_ADMIN_TO;
-  const adminTo = adminToRaw ? normalizeWhatsAppTo(adminToRaw) : null;
-  if (waTemplate && adminTo) {
-    try {
-      await sendWhatsAppTemplateMessage({
-        to: adminTo,
-        templateName: waTemplate,
-        components: [
-          {
-            type: "body",
-            parameters: [{ type: "text", text: params.customerName }, { type: "text", text: params.orderId }]
-          }
-        ]
-      });
-    } catch {}
+  const adminTos = parseWhatsAppRecipients(adminToRaw);
+  if (waTemplate && adminTos.length) {
+    await Promise.allSettled(
+      adminTos.map((to) =>
+        sendWhatsAppTemplateMessage({
+          to,
+          templateName: waTemplate,
+          components: [
+            {
+              type: "body",
+              parameters: [{ type: "text", text: params.customerName }, { type: "text", text: params.orderId }]
+            }
+          ]
+        })
+      )
+    );
   }
 }
 
@@ -111,6 +114,24 @@ export async function notifyPaymentCompleted(params: {
         ]
       });
     } catch {}
+  }
+
+  const adminTos = parseWhatsAppRecipients(process.env.WHATSAPP_ADMIN_TO);
+  if (waTemplate && adminTos.length) {
+    await Promise.allSettled(
+      adminTos.map((to) =>
+        sendWhatsAppTemplateMessage({
+          to,
+          templateName: waTemplate,
+          components: [
+            {
+              type: "body",
+              parameters: [{ type: "text", text: String(params.totalAmount) }, { type: "text", text: params.orderId }]
+            }
+          ]
+        })
+      )
+    );
   }
 }
 
@@ -162,6 +183,29 @@ export async function notifyPaymentFailed(params: {
         ]
       });
     } catch {}
+  }
+
+  const adminTos = parseWhatsAppRecipients(process.env.WHATSAPP_ADMIN_TO);
+  if (waTemplate && adminTos.length) {
+    const safeName = params.customerName?.trim() || "Customer";
+    await Promise.allSettled(
+      adminTos.map((to) =>
+        sendWhatsAppTemplateMessage({
+          to,
+          templateName: waTemplate,
+          components: [
+            {
+              type: "body",
+              parameters: [
+                { type: "text", text: safeName },
+                { type: "text", text: String(params.totalAmount) },
+                { type: "text", text: params.orderId }
+              ]
+            }
+          ]
+        })
+      )
+    );
   }
 }
 

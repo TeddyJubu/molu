@@ -14,8 +14,8 @@ export default async function AdminProductsPage({
   searchParams
 }: {
   searchParams?: Promise<Record<string, string | string[] | undefined>>;
-} = {}) {
-  const params = (await searchParams) ?? {};
+}) {
+  const params = (searchParams ? await searchParams : {}) ?? {};
   const query = (Array.isArray(params.query) ? params.query[0] : params.query) ?? "";
   const status = (Array.isArray(params.status) ? params.status[0] : params.status) ?? "";
   const hideTestRaw = (Array.isArray(params.hide_test) ? params.hide_test[0] : params.hide_test) ?? "";
